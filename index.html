@@ -1,19 +1,557 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мой новый сайт</title>
-    <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f4f4f9; }
-        .container { text-align: center; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { color: #333; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7 Чудес Света</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --gold:      #C8A96E;
+  --gold-l:    #E8D5A3;
+  --gold-d:    #7A5C10;
+  --ink:       #080604;
+  --parchment: #F0E6CE;
+  --stone:     #1C160E;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--ink);
+  color: var(--parchment);
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* ═══ CURSOR ═══ */
+#cur  { position:fixed; width:8px; height:8px; background:var(--gold); border-radius:50%; pointer-events:none; z-index:9999; transform:translate(-50%,-50%); mix-blend-mode:difference; transition:width .2s,height .2s; }
+#ring { position:fixed; width:32px; height:32px; border:1px solid rgba(200,169,110,.45); border-radius:50%; pointer-events:none; z-index:9998; transform:translate(-50%,-50%); transition:width .45s cubic-bezier(.25,.46,.45,.94),height .45s cubic-bezier(.25,.46,.45,.94),border-color .3s; }
+#cur.h  { width:5px; height:5px; }
+#ring.h { width:52px; height:52px; border-color:rgba(200,169,110,.75); }
+
+/* ═══ HERO ═══ */
+.hero {
+  position:relative; min-height:100vh;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; overflow:hidden; padding:2rem;
+}
+.hero-bg {
+  position:absolute; inset:0; background-color:var(--ink);
+  background-image:
+    radial-gradient(ellipse 70% 50% at 50% 90%, rgba(200,169,110,.08) 0%, transparent 65%),
+    radial-gradient(ellipse 40% 40% at 10% 10%, rgba(200,169,110,.04) 0%, transparent 55%),
+    repeating-linear-gradient(0deg, transparent 0px, transparent 79px, rgba(200,169,110,.022) 79px, rgba(200,169,110,.022) 80px),
+    repeating-linear-gradient(90deg,transparent 0px, transparent 79px, rgba(200,169,110,.022) 79px, rgba(200,169,110,.022) 80px);
+}
+.stars { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+.star  { position:absolute; background:var(--gold-l); border-radius:50%;
+         animation:twinkle var(--d,3s) ease-in-out infinite alternate var(--dl,0s); }
+@keyframes twinkle { from{opacity:.06;transform:scale(.7)} to{opacity:.9;transform:scale(1.3)} }
+
+.hero::after {
+  content:''; position:absolute; left:0; right:0; top:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+  opacity:.35; animation:scan 9s linear infinite;
+}
+@keyframes scan { from{top:0} to{top:100%} }
+
+.eyebrow {
+  font-family:'Cinzel Decorative',serif; font-size:clamp(.42rem,.9vw,.6rem);
+  letter-spacing:.6em; color:var(--gold); text-transform:uppercase; margin-bottom:1.5rem;
+  opacity:0; animation:fadeUp 1s .3s forwards;
+}
+.hero-title {
+  font-family:'Cinzel Decorative',serif; font-size:clamp(3rem,11vw,9.5rem);
+  font-weight:900; line-height:.92;
+  color:transparent;
+  background:linear-gradient(145deg,var(--gold-l) 0%,var(--gold) 40%,var(--gold-d) 68%,var(--gold) 100%);
+  -webkit-background-clip:text; background-clip:text;
+  filter:drop-shadow(0 0 90px rgba(200,169,110,.32));
+  opacity:0; animation:fadeUp 1.2s .5s forwards;
+}
+.hero-line { width:90px; height:1px; background:linear-gradient(90deg,transparent,var(--gold),transparent); margin:2rem auto; opacity:0; animation:fadeIn 1s 1.1s forwards; }
+.hero-sub  { font-size:clamp(.95rem,2vw,1.45rem); font-weight:300; font-style:italic; color:var(--gold-l); opacity:0; letter-spacing:.07em; animation:fadeUp 1s .85s forwards; }
+.scroll-hint { position:absolute; bottom:2rem; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:8px; opacity:0; animation:fadeIn 1s 2.4s forwards; }
+.scroll-hint span { font-size:.58rem; letter-spacing:.4em; color:var(--gold); opacity:.45; text-transform:uppercase; }
+.arr { width:14px; height:14px; border-right:1px solid var(--gold); border-bottom:1px solid var(--gold); transform:rotate(45deg); opacity:.35; animation:bounce 2.2s ease-in-out infinite; }
+@keyframes bounce { 0%,100%{transform:rotate(45deg) translateY(0)} 50%{transform:rotate(45deg) translateY(7px)} }
+
+@keyframes fadeUp { from{opacity:0;transform:translateY(26px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+/* ═══ INTRO ═══ */
+.intro {
+  max-width:680px; margin:0 auto; padding:7rem 2rem; text-align:center;
+}
+.intro p { font-size:clamp(1rem,1.7vw,1.25rem); font-weight:300; line-height:2.1; opacity:.78; }
+.orn { color:var(--gold); font-size:1.1rem; display:block; margin:1.4rem 0; letter-spacing:.55em; opacity:.5; }
+
+/* ═══ STATS ═══ */
+.stats { max-width:800px; margin:0 auto; padding:1rem 2rem 6rem; display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; text-align:center; }
+@media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr);}}
+.sn { font-family:'Cinzel Decorative',serif; font-size:clamp(1.6rem,3.5vw,2.6rem); font-weight:900; color:transparent; background:linear-gradient(135deg,var(--gold-l),var(--gold)); -webkit-background-clip:text; background-clip:text; display:block; line-height:1; margin-bottom:.5rem; }
+.sl { font-size:.64rem; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); opacity:.4; line-height:1.6; }
+
+/* ═══ DIVIDER ═══ */
+.div { height:1px; background:linear-gradient(90deg,transparent 0%,var(--gold) 28%,var(--gold-l) 50%,var(--gold) 72%,transparent 100%); margin:0 6%; opacity:.25; }
+
+/* ═══ CHAPTER HEADER ═══ */
+.chapter-hdr { text-align:center; padding:5rem 2rem 4rem; }
+.chapter-hdr h2 { font-family:'Cinzel Decorative',serif; font-size:clamp(.58rem,1.2vw,.78rem); letter-spacing:.55em; color:var(--gold); text-transform:uppercase; opacity:.55; }
+
+/* ═══ WONDER PANEL — FULL WIDTH ═══ */
+.wonder {
+  position:relative; width:100%; min-height:100vh;
+  display:flex; align-items:stretch;
+  overflow:hidden;
+}
+
+/* alternating layout */
+.wonder.flip { flex-direction:row-reverse; }
+
+/* ── Photo half ── */
+.w-photo {
+  position:relative; flex:0 0 55%; overflow:hidden;
+}
+.w-photo img {
+  width:100%; height:100%;
+  object-fit:cover; object-position:center;
+  display:block;
+  filter:grayscale(.2) brightness(.75) saturate(.95);
+  transition:transform 1.1s cubic-bezier(.25,.46,.45,.94), filter .8s;
+}
+.wonder:hover .w-photo img {
+  transform:scale(1.05);
+  filter:grayscale(0) brightness(.72) saturate(1.1);
+}
+
+/* overlay on photo edge */
+.w-photo::after {
+  content:''; position:absolute; inset:0; pointer-events:none;
+}
+.wonder:not(.flip) .w-photo::after {
+  background:linear-gradient(to right, transparent 55%, var(--ink) 100%);
+}
+.wonder.flip .w-photo::after {
+  background:linear-gradient(to left, transparent 55%, var(--ink) 100%);
+}
+
+/* credit */
+.w-credit {
+  position:absolute; bottom:.7rem; right:.8rem;
+  font-size:.48rem; letter-spacing:.1em; text-transform:uppercase;
+  color:rgba(200,169,110,.28); z-index:2;
+}
+.wonder.flip .w-credit { right:auto; left:.8rem; }
+
+/* ── Text half ── */
+.w-text {
+  flex:0 0 45%; display:flex; align-items:center;
+  padding:5rem 5rem 5rem 4.5rem;
+  position:relative; z-index:2;
+}
+.wonder.flip .w-text { padding:5rem 4.5rem 5rem 5rem; }
+
+.w-inner { max-width:480px; }
+
+.w-num {
+  font-family:'Cinzel Decorative',serif; font-size:.5rem; letter-spacing:.5em;
+  color:var(--gold); opacity:.55; text-transform:uppercase; margin-bottom:1rem;
+  display:flex; align-items:center; gap:1rem;
+}
+.w-num::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--gold),transparent); opacity:.4; }
+
+.w-title {
+  font-family:'Cinzel Decorative',serif;
+  font-size:clamp(1.8rem,3.5vw,3.2rem);
+  font-weight:700; line-height:1.1; color:var(--gold-l);
+  margin-bottom:.5rem;
+}
+
+.w-loc {
+  font-size:.8rem; font-style:italic; color:var(--gold); opacity:.6;
+  letter-spacing:.2em; margin-bottom:2rem;
+}
+
+.w-body {
+  font-size:clamp(.9rem,1.5vw,1.08rem); font-weight:300; line-height:1.95;
+  color:var(--parchment); opacity:.82; margin-bottom:2rem;
+}
+
+.w-facts {
+  display:flex; flex-wrap:wrap; gap:.6rem; margin-bottom:2rem;
+}
+.w-fact {
+  font-size:.6rem; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--gold); border:1px solid rgba(200,169,110,.22);
+  padding:5px 16px;
+}
+
+.w-quote {
+  border-left:2px solid rgba(200,169,110,.35);
+  padding-left:1.2rem; margin-top:1.5rem;
+  font-style:italic; font-size:clamp(.85rem,1.3vw,1rem);
+  color:var(--gold-l); opacity:.55; line-height:1.7;
+}
+
+/* big background number */
+.w-bgnum {
+  position:absolute;
+  font-family:'Cinzel Decorative',serif;
+  font-size:clamp(8rem,18vw,22rem);
+  font-weight:900;
+  color:transparent;
+  -webkit-text-stroke:1px rgba(200,169,110,.05);
+  user-select:none; pointer-events:none; line-height:1;
+  bottom:-2rem; right:-1rem; z-index:1;
+  transition:opacity .5s;
+}
+.wonder.flip .w-bgnum { right:auto; left:-1rem; }
+.wonder:hover .w-bgnum { -webkit-text-stroke:1px rgba(200,169,110,.1); }
+
+/* noise */
+.wonder::before {
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity:.3; mix-blend-mode:overlay;
+}
+
+/* thin top line on each panel */
+.wonder-line {
+  position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(200,169,110,.18),transparent);
+  z-index:3;
+}
+
+@media(max-width:860px){
+  .wonder, .wonder.flip { flex-direction:column; min-height:auto; }
+  .w-photo { flex:0 0 55vw; height:55vw; width:100%; }
+  .w-photo::after { background:linear-gradient(to bottom,transparent 55%,var(--ink) 100%) !important; }
+  .w-text { padding:3rem 1.8rem; flex:unset; }
+  .wonder.flip .w-text { padding:3rem 1.8rem; }
+  .w-bgnum { display:none; }
+}
+
+/* ═══ REVEAL ═══ */
+.reveal { opacity:0; transform:translateY(32px); transition:opacity .9s ease,transform .9s ease; }
+.reveal.visible { opacity:1; transform:translateY(0); }
+.reveal-l { opacity:0; transform:translateX(-40px); transition:opacity .9s ease,transform .9s ease; }
+.reveal-r { opacity:0; transform:translateX(40px);  transition:opacity .9s ease,transform .9s ease; }
+.reveal-l.visible, .reveal-r.visible { opacity:1; transform:translateX(0); }
+
+/* ═══ FOOTER ═══ */
+footer { text-align:center; padding:3rem 2rem 4rem; border-top:1px solid rgba(200,169,110,.07); margin-top:2rem; }
+footer p { font-size:.58rem; letter-spacing:.4em; color:var(--gold); opacity:.25; text-transform:uppercase; font-family:'Cinzel Decorative',serif; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1> УӘӘӘӘӘӘ МЕН ШИВИЛЯМЫН!</h1>
-        <p>Этот HTML-файл теперь привязан к твоему домену.</p>
+
+<div id="cur"></div>
+<div id="ring"></div>
+
+<!-- ══════════════════════ HERO ══════════════════════ -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="stars" id="stars"></div>
+  <p class="eyebrow">Наследие Человечества &nbsp;·&nbsp; Antiquitatis Miracula</p>
+  <h1 class="hero-title">7 Чудес<br>Света</h1>
+  <div class="hero-line"></div>
+  <p class="hero-sub">Величайшие творения древнего мира</p>
+  <div class="scroll-hint"><span>Scroll</span><div class="arr"></div></div>
+</section>
+
+<!-- INTRO -->
+<section class="intro reveal">
+  <span class="orn">✦ &nbsp; ✦ &nbsp; ✦</span>
+  <p>Семь чудес света — грандиозные памятники архитектуры, поражавшие воображение
+  древних греков. Большинство не пережило тысячелетий. Лишь одно стоит по сей день —
+  немым свидетелем ушедших эпох.</p>
+  <span class="orn">✦ &nbsp; ✦ &nbsp; ✦</span>
+</section>
+
+<!-- STATS -->
+<section class="stats reveal">
+  <div><span class="sn">2560</span><span class="sl">лет до н.э.<br>древнейшее</span></div>
+  <div><span class="sn">6</span><span class="sl">из семи<br>утрачены</span></div>
+  <div><span class="sn">138м</span><span class="sl">высота пирамиды<br>сегодня</span></div>
+  <div><span class="sn">3800</span><span class="sl">лет рекорд<br>высоты</span></div>
+</section>
+
+<div class="div"></div>
+<div class="chapter-hdr reveal"><h2>· Великие Монументы ·</h2></div>
+
+<!-- ══════════════════════ I ПИРАМИДА ══════════════════════ -->
+<!-- фото слева, текст справа -->
+<section class="wonder reveal-l">
+  <div class="wonder-line"></div>
+  <div class="w-photo">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Kheops-Pyramid.jpg/1280px-Kheops-Pyramid.jpg"
+         alt="Великая пирамида Гизы" loading="lazy">
+    <span class="w-credit">© Nina Aldin Thune · Wikimedia CC-BY-SA</span>
+  </div>
+  <div class="w-text">
+    <div class="w-inner">
+      <p class="w-num">Чудо I &nbsp;·&nbsp; Aegyptus</p>
+      <h2 class="w-title">Великая пирамида<br>Гизы</h2>
+      <p class="w-loc">Египет &nbsp;·&nbsp; Гиза &nbsp;·&nbsp; 2560 до н.э.</p>
+      <p class="w-body">
+        Единственное из семи чудес, сохранившееся до наших дней. Более 2,3 миллиона
+        каменных блоков весом от 2,5 до 15 тонн каждый — и ни раствора, ни клея.
+        Построенная как вечная гробница фараона Хеопса, пирамида в течение 3800 лет
+        оставалась самым высоким сооружением в мире. Её первоначальная высота достигала
+        146 метров; сегодня — 138 м.
+      </p>
+      <div class="w-facts">
+        <span class="w-fact">Единственное сохранившееся</span>
+        <span class="w-fact">138 м высоты</span>
+        <span class="w-fact">26 лет строительства</span>
+      </div>
+      <p class="w-quote">«Все на свете боится времени, но время боится пирамид»<br>— арабская пословица</p>
     </div>
+  </div>
+  <div class="w-bgnum">I</div>
+</section>
+
+<!-- ══════════════════════ II САДЫ ══════════════════════ -->
+<!-- фото справа, текст слева -->
+<section class="wonder flip reveal-r">
+  <div class="wonder-line"></div>
+  <div class="w-photo">
+    <img src="https://static.tildacdn.com/tild6663-3962-4166-a264-343939313631/D0BED0B1D0BBD0BED0B6.png"
+         alt="Висячие сады Вавилона" loading="lazy" style="object-position:center top;">
+    <span class="w-credit">Гравюра 1886 · Public domain</span>
+  </div>
+  <div class="w-text">
+    <div class="w-inner">
+      <p class="w-num">Чудо II &nbsp;·&nbsp; Babylon</p>
+      <h2 class="w-title">Висячие сады<br>Вавилона</h2>
+      <p class="w-loc">Вавилон &nbsp;·&nbsp; Ирак &nbsp;·&nbsp; ~600 до н.э.</p>
+      <p class="w-body">
+        По преданию, царь Навуходоносор II приказал разбить эти восхитительные
+        террасные сады для своей жены Амитис — персидской принцессы, тоскующей
+        по зелёным горам родины. Многоярусные платформы с экзотическими деревьями
+        и цветами орошались сложной системой подъёма воды. Ни одного
+        современного письменного свидетельства не сохранилось.
+      </p>
+      <div class="w-facts">
+        <span class="w-fact">Возможно, легенда</span>
+        <span class="w-fact">~25 м высоты</span>
+        <span class="w-fact">Нет письменных источников</span>
+      </div>
+      <p class="w-quote">«Там росли деревья всех видов, плоды которых восхищали глаза и услаждали вкус»<br>— Диодор Сицилийский</p>
+    </div>
+  </div>
+  <div class="w-bgnum">II</div>
+</section>
+
+<!-- ══════════════════════ III ЗЕВС ══════════════════════ -->
+<!-- фото слева -->
+<section class="wonder reveal-l">
+  <div class="wonder-line"></div>
+  <div class="w-photo">
+    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS7TC1GFYM9JtM7xtssjkL4k4e-EqX_QBMg7w&s"
+         alt="Статуя Зевса в Олимпии" loading="lazy" style="object-position:center 15%;">
+    <span class="w-credit">Реконструкция · Public domain</span>
+  </div>
+  <div class="w-text">
+    <div class="w-inner">
+      <p class="w-num">Чудо III &nbsp;·&nbsp; Olympia</p>
+      <h2 class="w-title">Статуя Зевса<br>в Олимпии</h2>
+      <p class="w-loc">Греция &nbsp;·&nbsp; Олимпия &nbsp;·&nbsp; ~435 до н.э.</p>
+      <p class="w-body">
+        Скульптор Фидий создал этот колосс из слоновой кости и золота — 13 метров
+        высоты, восседающий на украшенном троне. Зевс держал в правой руке Нику,
+        богиню победы, в левой — скипетр с орлом. Говорили, что тот, кто взглянет
+        на статую, забудет все горести. Она простояла восемь веков, пока не была
+        уничтожена пожаром в V веке нашей эры.
+      </p>
+      <div class="w-facts">
+        <span class="w-fact">~13 м высоты</span>
+        <span class="w-fact">Золото и слоновая кость</span>
+        <span class="w-fact">Утрачена в V в.</span>
+      </div>
+      <p class="w-quote">«Видя его, нельзя не забыть всё, что огорчало тебя в жизни»<br>— Эпиктет</p>
+    </div>
+  </div>
+  <div class="w-bgnum">III</div>
+</section>
+
+<!-- ══════════════════════ IV АРТЕМИДА ══════════════════════ -->
+<!-- фото справа -->
+<section class="wonder flip reveal-r">
+  <div class="wonder-line"></div>
+  <div class="w-photo">
+    <img src="https://alantatour.com/wp-content/uploads/2024/08/the-temple-of-artemis-2.jpg"
+         alt="Храм Артемиды Эфесской" loading="lazy" style="object-position:center 35%;">
+    <span class="w-credit">Руины Эфеса · Wikimedia CC</span>
+  </div>
+  <div class="w-text">
+    <div class="w-inner">
+      <p class="w-num">Чудо IV &nbsp;·&nbsp; Ephesus</p>
+      <h2 class="w-title">Храм Артемиды<br>Эфесской</h2>
+      <p class="w-loc">Турция &nbsp;·&nbsp; Эфес &nbsp;·&nbsp; ~550 до н.э.</p>
+      <p class="w-body">
+        127 мраморных колонн высотой 18 метров, посвящённых богине охоты Артемиде.
+        В 356 году до н.э. храм был сожжён Геростратом, мечтавшим обессмертить
+        своё имя любой ценой. Любопытное совпадение: в ту же ночь родился Александр
+        Македонский. Храм отстроили заново — ещё грандиознее. Римляне называли его
+        «звездой Ионии».
+      </p>
+      <div class="w-facts">
+        <span class="w-fact">127 колонн</span>
+        <span class="w-fact">Дважды уничтожен</span>
+        <span class="w-fact">Разрушен в 401 н.э.</span>
+      </div>
+      <p class="w-quote">«Когда я увидел дом Артемиды, вздымающийся к облакам, те другие чудеса потеряли свой блеск»<br>— Антипатр Сидонский</p>
+    </div>
+  </div>
+  <div class="w-bgnum">IV</div>
+</section>
+
+<!-- ══════════════════════ V МАВЗОЛЕЙ ══════════════════════ -->
+<!-- фото слева -->
+<section class="wonder reveal-l">
+  <div class="wonder-line"></div>
+  <div class="w-photo">
+    <img src="https://cappadociavisit.com/wp-content/uploads/2017/06/mavzolej.jpg.webp"
+         alt="Мавзолей в Галикарнасе" loading="lazy" style="object-position:center 40%;">
+    <span class="w-credit">Модель · Музей Бодрума · Wikimedia CC</span>
+  </div>
+  <div class="w-text">
+    <div class="w-inner">
+      <p class="w-num">Чудо V &nbsp;·&nbsp; Halicarnassus</p>
+      <h2 class="w-title">Мавзолей<br>в Галикарнасе</h2>
+      <p class="w-loc">Турция &nbsp;·&nbsp; Бодрум &nbsp;·&nbsp; ~350 до н.э.</p>
+      <p class="w-body">
+        Трёхъярусная гробница карийского сатрапа Мавсола, воздвигнутая его супругой
+        Артемисией II после его смерти. Высота — около 45 метров, украшена барельефами
+        лучших греческих скульпторов. Само слово «мавзолей» вошло во все языки мира
+        именно благодаря этому строению. Разрушен серией землетрясений в XIII–XV вв.
+      </p>
+      <div class="w-facts">
+        <span class="w-fact">~45 м высоты</span>
+        <span class="w-fact">Дал слово «мавзолей»</span>
+        <span class="w-fact">Разрушен землетрясением</span>
+      </div>
+      <p class="w-quote">«Артемисия выстроила ему гробницу, которой до сих пор нет равной на свете»<br>— Авл Геллий</p>
+    </div>
+  </div>
+  <div class="w-bgnum">V</div>
+</section>
+
+<!-- ══════════════════════ VI КОЛОСС ══════════════════════ -->
+<!-- фото справа -->
+<section class="wonder flip reveal-r">
+  <div class="wonder-line"></div>
+  <div class="w-photo">
+    <img src="https://putidorogi-nn.ru/images/stories/7_chudes_sveta/koloss-rodosskiy_3.jpg"
+         alt="Колосс Родосский" loading="lazy" style="object-position:center 10%;">
+    <span class="w-credit">Гравюра XVI в. · Public domain</span>
+  </div>
+  <div class="w-text">
+    <div class="w-inner">
+      <p class="w-num">Чудо VI &nbsp;·&nbsp; Rhodos</p>
+      <h2 class="w-title">Колосс<br>Родосский</h2>
+      <p class="w-loc">Греция &nbsp;·&nbsp; Родос &nbsp;·&nbsp; ~280 до н.э.</p>
+      <p class="w-body">
+        Бронзовая статуя бога Гелиоса высотой около 33 метров — примерно как Статуя
+        Свободы без пьедестала. Возведена в честь победы жителей Родоса над
+        македонским полководцем Деметрием. На строительство ушло 12 лет.
+        Простояв лишь 54 года, Колосс рухнул при землетрясении.
+        Его обломки лежали на земле ещё 900 лет — и всё равно привлекали паломников.
+      </p>
+      <div class="w-facts">
+        <span class="w-fact">~33 м высоты</span>
+        <span class="w-fact">54 года простоял</span>
+        <span class="w-fact">12 лет строился</span>
+      </div>
+      <p class="w-quote">«Даже лежащий на земле, он вызывал восхищение»<br>— Плиний Старший</p>
+    </div>
+  </div>
+  <div class="w-bgnum">VI</div>
+</section>
+
+<!-- ══════════════════════ VII МАЯК ══════════════════════ -->
+<!-- фото слева -->
+<section class="wonder reveal-l">
+  <div class="wonder-line"></div>
+  <div class="w-photo">
+    <img src="https://static.wikia.nocookie.net/history-total-war/images/a/a8/Lighthouse_of_Alexandria.jpg/revision/latest?cb=20200521041110&path-prefix=ru"
+         alt="Александрийский маяк" loading="lazy" style="object-position:center top;">
+    <span class="w-credit">Гравюра Филипа Галле · 1572 · Public domain</span>
+  </div>
+  <div class="w-text">
+    <div class="w-inner">
+      <p class="w-num">Чудо VII &nbsp;·&nbsp; Alexandria</p>
+      <h2 class="w-title">Александрийский<br>маяк</h2>
+      <p class="w-loc">Египет &nbsp;·&nbsp; о-в Фарос &nbsp;·&nbsp; ~280 до н.э.</p>
+      <p class="w-body">
+        Трёхъярусная башня из белого мрамора высотой от 120 до 140 метров,
+        возведённая на острове Фарос у берегов Александрии. В вершине горел огонь,
+        усиленный системой бронзовых зеркал — его свет был виден за 50 километров.
+        На протяжении многих веков маяк оставался одним из самых высоких сооружений
+        в мире и был разрушен серией землетрясений в XIV веке.
+      </p>
+      <div class="w-facts">
+        <span class="w-fact">120–140 м высоты</span>
+        <span class="w-fact">Виден за 50 км</span>
+        <span class="w-fact">Разрушен в XIV в.</span>
+      </div>
+      <p class="w-quote">«Спаситель всех мореплавателей» — так называли маяк<br>древние греки</p>
+    </div>
+  </div>
+  <div class="w-bgnum">VII</div>
+</section>
+
+<div class="div" style="margin-top:0;"></div>
+
+<footer>
+  <p>Семь Чудес Древнего Мира &nbsp;·&nbsp; Antiquitatis Miracula &nbsp;·&nbsp; Наследие Вечности</p>
+</footer>
+
+<script>
+/* ── cursor ── */
+const cur  = document.getElementById('cur');
+const ring = document.getElementById('ring');
+let rx=0,ry=0,mx=0,my=0;
+document.addEventListener('mousemove',e=>{
+  mx=e.clientX; my=e.clientY;
+  cur.style.left=mx+'px'; cur.style.top=my+'px';
+});
+(function animRing(){
+  rx+=(mx-rx)*.11; ry+=(my-ry)*.11;
+  ring.style.left=rx+'px'; ring.style.top=ry+'px';
+  requestAnimationFrame(animRing);
+})();
+document.querySelectorAll('.wonder,.w-photo').forEach(el=>{
+  el.addEventListener('mouseenter',()=>{cur.classList.add('h');ring.classList.add('h');});
+  el.addEventListener('mouseleave',()=>{cur.classList.remove('h');ring.classList.remove('h');});
+});
+
+/* ── stars ── */
+const sg=document.getElementById('stars');
+for(let i=0;i<150;i++){
+  const s=document.createElement('div');
+  const sz=Math.random()*2+.4;
+  s.className='star';
+  s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${(Math.random()*4+2).toFixed(1)}s;--dl:${(Math.random()*7).toFixed(1)}s`;
+  sg.appendChild(s);
+}
+
+/* ── reveal ── */
+const obs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('visible'); });
+},{threshold:.08});
+document.querySelectorAll('.reveal,.reveal-l,.reveal-r').forEach(el=>obs.observe(el));
+
+/* ── hero stars parallax ── */
+window.addEventListener('scroll',()=>{
+  sg.style.transform=`translateY(${window.scrollY*.25}px)`;
+},{passive:true});
+</script>
 </body>
 </html>
