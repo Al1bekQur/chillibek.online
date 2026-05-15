@@ -151,7 +151,6 @@
         let totalMessagesCount = 0;
         let typingTimeout = null;
 
-        // Полноценный глубокий кибер-звук (работает железобетонно при клике)
         function playNotificationSound() {
             try {
                 const context = new (window.AudioContext || window.webkitAudioContext)();
@@ -179,7 +178,7 @@
 
         async function confirmLogout() {
             if (confirm("Вы точно хотите выйти из аккаунта?")) {
-                await fetch('http://127.0.0.1:5000/logout', {
+                await fetch('https://kali.pythonanywhere.com/logout', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username: myName })
@@ -203,7 +202,7 @@
         async function tryRegister() {
             const u = document.getElementById('regUsername').value;
             const p = document.getElementById('regPassword').value;
-            const res = await fetch('http://127.0.0.1:5000/register', {
+            const res = await fetch('https://kali.pythonanywhere.com/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: u, password: p })
@@ -216,7 +215,7 @@
         async function tryLogin() {
             const u = document.getElementById('loginUsername').value;
             const p = document.getElementById('loginPassword').value;
-            const res = await fetch('http://127.0.0.1:5000/login', {
+            const res = await fetch('https://kali.pythonanywhere.com/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: u, password: p })
@@ -238,7 +237,7 @@
             const box = document.getElementById('searchResults');
             if (!query) { box.classList.add('hidden'); return; }
             
-            const res = await fetch(`http://127.0.0.1:5000/search?username=${query}`);
+            const res = await fetch(`https://kali.pythonanywhere.com/search?username=${query}`);
             const users = await res.json();
             
             box.innerHTML = "";
@@ -259,7 +258,7 @@
         }
 
         async function loadActiveChats() {
-            const res = await fetch(`http://127.0.0.1:5000/active_chats?username=${myName}`);
+            const res = await fetch(`https://kali.pythonanywhere.com/active_chats?username=${myName}`);
             const chats = await res.json();
             const box = document.getElementById('activeChatsBox');
             box.innerHTML = "";
@@ -296,7 +295,7 @@
         }
 
         async function sendTypingStatus(isTyping) {
-            await fetch('http://127.0.0.1:5000/typing', {
+            await fetch('https://kali.pythonanywhere.com/typing', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: myName, typing_to: isTyping ? activeChatUser : null })
@@ -314,7 +313,7 @@
             if (typingTimeout) clearTimeout(typingTimeout);
             await sendTypingStatus(false);
 
-            await fetch('http://127.0.0.1:5000/send', {
+            await fetch('https://kali.pythonanywhere.com/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sender: myName, receiver: activeChatUser, text: text })
@@ -325,7 +324,7 @@
 
         async function loadMessages() {
             if(!activeChatUser) return;
-            const res = await fetch(`http://127.0.0.1:5000/messages?sender=${myName}&receiver=${activeChatUser}`);
+            const res = await fetch(`https://kali.pythonanywhere.com/messages?sender=${myName}&receiver=${activeChatUser}`);
             const data = await res.json();
             
             document.getElementById('chatUserLastSeen').innerText = data.last_seen_str;
@@ -364,9 +363,8 @@
             box.scrollTop = box.scrollHeight;
         }
 
-        // ПОКАЗ МЕНЮ ДЛЯ 3-Х ТОЧЕК
         function showThreePointsMenu(event, msgId, isMe) {
-            event.stopPropagation(); // Отменяем клик по body
+            event.stopPropagation(); 
             const menu = document.getElementById('customContextMenu');
             menu.style.display = 'block';
             menu.style.left = `${event.clientX - 50}px`;
@@ -383,23 +381,19 @@
             document.getElementById('customContextMenu').style.display = 'none';
         }
 
-        // ЖОСТКАЯ АНИМАЦИЯ И УДАЛЕНИЕ ИЗ БД
         async function triggerDeleteMessage(msgId) {
             if (confirm("Вы точно хотите удалить это сообщение для всех?")) {
-                // Инициализируем анимацию на фронтенде мгновенно для красоты
                 const block = document.getElementById(`msg-block-${msgId}`);
                 if (block) {
                     block.classList.add('deleted-anim');
                 }
                 
-                // Отправляем запрос удаления в базу
-                await fetch('http://127.0.0.1:5000/delete_message', {
+                await fetch('https://kali.pythonanywhere.com/delete_message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message_id: msgId, username: myName })
                 });
                 
-                // Даем анимации завершиться (400мс) и обновляем данные
                 setTimeout(loadMessages, 400);
             }
         }
@@ -413,7 +407,7 @@
             document.getElementById('profileTitle').innerText = `Мой профиль: ${myName}`;
             document.getElementById('profileLastSeen').innerText = "В сети";
             
-            const res = await fetch(`http://127.0.0.1:5000/get_profile?username=${myName}`);
+            const res = await fetch(`https://kali.pythonanywhere.com/get_profile?username=${myName}`);
             const data = await res.json();
             
             document.getElementById('profileAbout').value = data.about_text;
@@ -426,7 +420,7 @@
             previousWindow = "chatWindow";
             document.getElementById('profileTitle').innerText = `Профиль: ${activeChatUser}`;
             
-            const res = await fetch(`http://127.0.0.1:5000/get_profile?username=${activeChatUser}`);
+            const res = await fetch(`https://kali.pythonanywhere.com/get_profile?username=${activeChatUser}`);
             const data = await res.json();
             
             document.getElementById('profileLastSeen').innerText = data.last_seen_str;
@@ -438,7 +432,7 @@
 
         async function saveProfile() {
             const text = document.getElementById('profileAbout').value;
-            const res = await fetch('http://127.0.0.1:5000/update_profile', {
+            const res = await fetch('https://kali.pythonanywhere.com/update_profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: myName, about_text: text })
@@ -454,7 +448,7 @@
 
         window.addEventListener('beforeunload', function () {
             if (myName) {
-                navigator.sendBeacon('http://127.0.0.1:5000/logout', JSON.stringify({ username: myName }));
+                navigator.sendBeacon('https://kali.pythonanywhere.com/logout', JSON.stringify({ username: myName }));
             }
         });
     </script>
