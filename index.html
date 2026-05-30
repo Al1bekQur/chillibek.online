@@ -13,14 +13,9 @@
             --text-muted: #857874; 
         }
 
-        /* Жесткая блокировка скролла для модалок */
-        .modal-open {
-            overflow: hidden !important;
-            overscroll-behavior: none !important;
-        }
-
         body {
             background-color: var(--bg);
+            /* Тот самый первый фон с линиями и узорами */
             background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 20.5V18H0v-2h20v-2h2v2h20v2H22v2.5h-2zm0 0H0v-2h20v2z' fill='%23e0d8cf' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E");
             color: var(--text-main);
             font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -28,7 +23,7 @@
             padding: 0;
             -webkit-tap-highlight-color: transparent;
             padding-bottom: 80px; 
-            overscroll-behavior-y: none; /* Убиваем случайное обновление страницы свайпом */
+            overscroll-behavior-y: none; 
         }
 
         .header { background: rgba(249, 246, 240, 0.95); backdrop-filter: blur(8px); padding: 20px 20px 15px 20px; text-align: center; border-bottom: 1px solid #EAE3D9; }
@@ -281,14 +276,22 @@
             }
         }
 
+        /* ЖЕЛЕЗОБЕТОННАЯ БЛОКИРОВКА ФОНА */
         function lockScroll() {
-            document.documentElement.classList.add('modal-open');
-            document.body.classList.add('modal-open');
+            const scrollY = window.scrollY;
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollY}px`;
+            document.body.style.width = '100%';
         }
 
         function unlockScroll() {
-            document.documentElement.classList.remove('modal-open');
-            document.body.classList.remove('modal-open');
+            const scrollY = document.body.style.top;
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY) * -1);
+            }
         }
 
         function toggleCart() {
@@ -359,12 +362,24 @@
             btn.classList.add('active');
             const target = document.getElementById(`section-${sectionId}`);
             if (target) {
-                // При скролле меню отменяем блокировку, если она зависла
-                unlockScroll();
                 target.scrollIntoView({ behavior: 'smooth' });
             }
         }
 
+        /* ПРЕДОТВРАЩЕНИЕ СКРОЛЛА ПРИ КАСАНИИ ЗАТЕМНЕННОГО ФОНА (Оверлея) */
+        document.getElementById('cartModal').addEventListener('touchmove', e => {
+            if (e.target === document.getElementById('cartModal')) {
+                if (e.cancelable) e.preventDefault();
+            }
+        }, {passive: false});
+
+        document.getElementById('itemDetailsModal').addEventListener('touchmove', e => {
+            if (e.target === document.getElementById('itemDetailsModal')) {
+                if (e.cancelable) e.preventDefault();
+            }
+        }, {passive: false});
+
+        /* ОБНОВЛЕННАЯ ЛОГИКА СВАЙПА (Блокирует скролл при перетаскивании) */
         function makeSwipeable(modalId, contentId, closeFunc) {
             const content = document.getElementById(contentId);
             let startY = 0;
@@ -382,11 +397,13 @@
                 if (!isDragging) return;
                 currentY = e.touches[0].clientY;
                 const deltaY = currentY - startY;
-                if (deltaY > 0) {
-                    if (e.cancelable) e.preventDefault(); // Намертво блокирует прокрутку заднего фона при свайпе окна
+                
+                // Если тянем окно вниз и находимся на самом верху модалки
+                if (deltaY > 0 && content.scrollTop <= 0) {
+                    if (e.cancelable) e.preventDefault(); // Намертво убивает фоновый скролл
                     content.style.transform = `translateY(${deltaY}px)`;
                 }
-            }, {passive: false});
+            }, {passive: false}); // ВАЖНО: false, чтобы работал preventDefault
 
             content.addEventListener('touchend', e => {
                 if (!isDragging) return;
@@ -394,7 +411,7 @@
                 const deltaY = currentY - startY;
                 content.style.transition = 'transform 0.3s ease-out';
                 
-                if (deltaY > 100) { 
+                if (deltaY > 100 && content.scrollTop <= 0) { 
                     closeFunc();
                 } else { 
                     content.style.transform = '';
