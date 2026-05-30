@@ -13,9 +13,14 @@
             --text-muted: #857874; 
         }
 
+        /* Жесткая блокировка скролла для модалок */
+        .modal-open {
+            overflow: hidden !important;
+            overscroll-behavior: none !important;
+        }
+
         body {
             background-color: var(--bg);
-            /* Возвращаем оригинальный паттерн с линиями */
             background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 20.5V18H0v-2h20v-2h2v2h20v2H22v2.5h-2zm0 0H0v-2h20v2z' fill='%23e0d8cf' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E");
             color: var(--text-main);
             font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -23,6 +28,7 @@
             padding: 0;
             -webkit-tap-highlight-color: transparent;
             padding-bottom: 80px; 
+            overscroll-behavior-y: none; /* Убиваем случайное обновление страницы свайпом */
         }
 
         .header { background: rgba(249, 246, 240, 0.95); backdrop-filter: blur(8px); padding: 20px 20px 15px 20px; text-align: center; border-bottom: 1px solid #EAE3D9; }
@@ -275,6 +281,16 @@
             }
         }
 
+        function lockScroll() {
+            document.documentElement.classList.add('modal-open');
+            document.body.classList.add('modal-open');
+        }
+
+        function unlockScroll() {
+            document.documentElement.classList.remove('modal-open');
+            document.body.classList.remove('modal-open');
+        }
+
         function toggleCart() {
             const modal = document.getElementById('cartModal');
             if (modal.style.display === 'flex') {
@@ -282,7 +298,7 @@
             } else {
                 modal.style.display = 'flex';
                 document.getElementById('cartContent').style.transform = '';
-                document.body.style.overflow = 'hidden'; // Блокировка скролла
+                lockScroll();
             }
         }
 
@@ -300,7 +316,7 @@
             
             document.getElementById('itemDetailsModal').style.display = 'flex';
             document.getElementById('detailsContent').style.transform = '';
-            document.body.style.overflow = 'hidden'; // Блокировка скролла
+            lockScroll();
         }
 
         function closeDetails() {
@@ -312,7 +328,7 @@
             const content = document.getElementById(contentId);
             content.style.transition = 'transform 0.3s ease-in';
             content.style.transform = 'translateY(100%)';
-            document.body.style.overflow = ''; // Возвращаем скролл сразу при начале закрытия
+            unlockScroll();
             setTimeout(() => {
                 document.getElementById(modalId).style.display = 'none';
                 content.style.transition = '';
@@ -342,7 +358,11 @@
             document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             const target = document.getElementById(`section-${sectionId}`);
-            if (target) target.scrollIntoView({ behavior: 'smooth' });
+            if (target) {
+                // При скролле меню отменяем блокировку, если она зависла
+                unlockScroll();
+                target.scrollIntoView({ behavior: 'smooth' });
+            }
         }
 
         function makeSwipeable(modalId, contentId, closeFunc) {
@@ -363,9 +383,10 @@
                 currentY = e.touches[0].clientY;
                 const deltaY = currentY - startY;
                 if (deltaY > 0) {
+                    if (e.cancelable) e.preventDefault(); // Намертво блокирует прокрутку заднего фона при свайпе окна
                     content.style.transform = `translateY(${deltaY}px)`;
                 }
-            }, {passive: true});
+            }, {passive: false});
 
             content.addEventListener('touchend', e => {
                 if (!isDragging) return;
