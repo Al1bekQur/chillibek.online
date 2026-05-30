@@ -15,13 +15,16 @@
 
         body {
             background-color: var(--bg);
-            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 20.5V18H0v-2h20v-2h2v2h20v2H22v2.5h-2zm0 0H0v-2h20v2z' fill='%23e0d8cf' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E");
+            /* Новая идеальная точечная сетка */
+            background-image: radial-gradient(rgba(133, 120, 116, 0.15) 1.5px, transparent 1.5px);
+            background-size: 20px 20px;
+            
             color: var(--text-main);
             font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             margin: 0;
             padding: 0;
             -webkit-tap-highlight-color: transparent;
-            padding-bottom: 80px; /* Отступ для плавающей корзины */
+            padding-bottom: 80px; 
         }
 
         .header { background: rgba(249, 246, 240, 0.95); backdrop-filter: blur(8px); padding: 20px 20px 15px 20px; text-align: center; border-bottom: 1px solid #EAE3D9; }
@@ -38,17 +41,16 @@
         .section-title { font-size: 1.4rem; font-weight: 800; margin: 35px 0 15px 0; padding-left: 12px; border-left: 4px solid var(--accent); scroll-margin-top: 80px; }
 
         .menu-item { display: flex; background: var(--card-bg); border-radius: 20px; overflow: hidden; margin-bottom: 18px; border: 1px solid #F0EBE1; box-shadow: 0 8px 20px rgba(0,0,0,0.04); position: relative; }
-        .item-img { width: 125px; height: 125px; object-fit: cover; flex-shrink: 0; }
+        .item-img { width: 125px; height: 125px; object-fit: cover; flex-shrink: 0; cursor: pointer; }
         .item-info { padding: 14px; display: flex; flex-direction: column; justify-content: space-between; flex-grow: 1; }
         .item-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-        .item-name { font-size: 1.05rem; font-weight: 700; margin: 0; line-height: 1.2; }
+        .item-name { font-size: 1.05rem; font-weight: 700; margin: 0; line-height: 1.2; cursor: pointer; }
         .item-weight { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); background: #F4EFE7; padding: 3px 8px; border-radius: 8px; white-space: nowrap; }
         .item-desc { font-size: 0.85rem; color: var(--text-muted); margin: 6px 0 auto 0; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         
         .price-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
         .item-price { font-size: 1.15rem; font-weight: 800; color: var(--accent); }
 
-        /* Кнопки добавления и счетчик */
         .add-btn { background: #F4EFE7; color: var(--accent); border: none; width: 32px; height: 32px; border-radius: 10px; font-size: 1.2rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .add-btn:active { transform: scale(0.95); }
         
@@ -56,19 +58,18 @@
         .qty-btn { background: none; border: none; color: white; width: 32px; height: 32px; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .qty-val { font-weight: bold; font-size: 1rem; width: 20px; text-align: center; }
 
-        /* Плавающая корзина */
         .floating-cart { position: fixed; bottom: 20px; right: 20px; background: var(--accent); width: 60px; height: 60px; border-radius: 30px; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(224, 90, 51, 0.4); cursor: pointer; transition: 0.3s; z-index: 1000; display: none; }
         .floating-cart svg { width: 28px; fill: white; }
         .cart-badge { position: absolute; top: 0; right: 0; background: #332B29; color: white; font-size: 0.75rem; font-weight: bold; width: 22px; height: 22px; border-radius: 11px; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); }
 
-        /* Модальное окно корзины */
-        .cart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; display: none; flex-direction: column; justify-content: flex-end; }
-        .cart-content { background: var(--card-bg); border-radius: 25px 25px 0 0; padding: 25px; max-height: 85vh; overflow-y: auto; animation: slideUp 0.3s ease-out; }
+        /* Общие стили для модальных окон */
+        .cart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; display: none; flex-direction: column; justify-content: flex-end; }
+        .cart-content { background: var(--card-bg); border-radius: 25px 25px 0 0; padding: 25px; max-height: 85vh; overflow-y: auto; animation: slideUp 0.3s ease-out; position: relative; }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         
         .cart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .cart-header h2 { margin: 0; font-size: 1.5rem; }
-        .close-cart { background: #F4EFE7; border: none; width: 36px; height: 36px; border-radius: 18px; font-size: 1.2rem; color: var(--text-main); font-weight: bold; cursor: pointer; }
+        .close-cart { background: #F4EFE7; border: none; width: 36px; height: 36px; border-radius: 18px; font-size: 1.2rem; color: var(--text-main); font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         
         .cart-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #F0EBE1; padding-bottom: 15px; }
         .cart-item-name { font-weight: 700; font-size: 1rem; margin-bottom: 5px; }
@@ -78,7 +79,21 @@
         .summary-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.95rem; color: var(--text-muted); }
         .summary-row.total { border-top: 1px dashed #EAE3D9; margin-top: 10px; padding-top: 10px; font-size: 1.3rem; font-weight: 800; color: var(--text-main); }
         
-        .order-btn { width: 100%; background: var(--accent); color: white; border: none; padding: 16px; border-radius: 15px; font-size: 1.1rem; font-weight: bold; margin-top: 15px; cursor: pointer; }
+        .order-btn { width: 100%; background: var(--accent); color: white; border: none; padding: 16px; border-radius: 15px; font-size: 1.1rem; font-weight: bold; margin-top: 15px; cursor: pointer; transition: 0.2s; }
+        .order-btn:active { transform: scale(0.98); }
+
+        /* Окно детального просмотра блюда */
+        #itemDetailsModal { z-index: 3000; }
+        .details-content { padding: 0; overflow: hidden; }
+        .details-img-container { position: relative; width: 100%; height: 280px; }
+        .details-img { width: 100%; height: 100%; object-fit: cover; }
+        .details-close-btn { position: absolute; top: 15px; right: 15px; z-index: 10; background: rgba(255, 255, 255, 0.9); box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
+        .details-info { padding: 25px; }
+        .details-title-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 10px; }
+        .details-title { margin: 0; font-size: 1.5rem; font-weight: 800; line-height: 1.2; }
+        .details-desc { color: var(--text-muted); font-size: 1rem; line-height: 1.5; margin-bottom: 30px; }
+        .details-footer { display: flex; justify-content: space-between; align-items: center; }
+        .details-price { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
     </style>
 </head>
 <body>
@@ -127,14 +142,36 @@
                 <div class="summary-row total"><span>Итого:</span><span id="totalPrice">0 ₸</span></div>
             </div>
             
-            <button class="order-btn" onclick="alert('Это демо-версия! В реальности здесь был бы вызов официанта или оплата.')">Оформить заказ</button>
+            <button class="order-btn" onclick="alert('Демо-версия! Ожидайте официанта.')">Оформить заказ</button>
+        </div>
+    </div>
+
+    <div class="cart-modal" id="itemDetailsModal">
+        <div class="cart-content details-content">
+            <div class="details-img-container">
+                <img id="detailsImg" class="details-img" src="" alt="">
+                <button class="close-cart details-close-btn" onclick="closeDetails()">✕</button>
+            </div>
+            <div class="details-info">
+                <div class="details-title-row">
+                    <h2 id="detailsTitle" class="details-title">Название</h2>
+                    <span id="detailsWeight" class="item-weight">0г</span>
+                </div>
+                <p id="detailsDesc" class="details-desc">Полное описание блюда...</p>
+                <div class="details-footer">
+                    <div id="detailsPrice" class="details-price">0 ₸</div>
+                    <div id="detailsControls">
+                        </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
         const categories = ['breakfasts', 'salads', 'soups', 'main', 'pizza', 'snacks', 'drinks'];
-        let menuData = []; // Храним загруженные блюда
-        let cart = {}; // Объект корзины: { id_блюда: количество }
+        let menuData = []; 
+        let cart = {}; 
+        let currentDetailsId = null; // Хранит ID блюда, открытого в детальном окне
 
         async function loadMenu() {
             try {
@@ -153,21 +190,21 @@
             menuData.forEach(item => {
                 const qty = cart[item.id] || 0;
                 
-                // Рендер кнопки: если 0 - то просто плюсик, если > 0 - то счетчик
                 let btnHtml = qty === 0 
-                    ? `<button class="add-btn" onclick="updateCart(${item.id}, 1)">＋</button>`
-                    : `<div class="qty-control">
+                    ? `<button class="add-btn" onclick="updateCart(${item.id}, 1); event.stopPropagation();">＋</button>`
+                    : `<div class="qty-control" onclick="event.stopPropagation();">
                            <button class="qty-btn" onclick="updateCart(${item.id}, -1)">−</button>
                            <span class="qty-val">${qty}</span>
                            <button class="qty-btn" onclick="updateCart(${item.id}, 1)">＋</button>
                        </div>`;
 
+                // При клике на картинку или название вызываем openDetails(item.id)
                 const itemHtml = `
                     <div class="menu-item">
-                        <img class="item-img" src="${item.image_url}" alt="${item.name}" loading="lazy">
+                        <img class="item-img" src="${item.image_url}" alt="${item.name}" loading="lazy" onclick="openDetails(${item.id})">
                         <div class="item-info">
                             <div class="item-header">
-                                <h3 class="item-name">${item.name}</h3>
+                                <h3 class="item-name" onclick="openDetails(${item.id})">${item.name}</h3>
                                 <span class="item-weight">${item.weight}</span>
                             </div>
                             <p class="item-desc">${item.description}</p>
@@ -184,14 +221,16 @@
             });
         }
 
+        // Логика корзины
         function updateCart(id, delta) {
             if (!cart[id]) cart[id] = 0;
             cart[id] += delta;
             
             if (cart[id] <= 0) delete cart[id];
             
-            renderMenu(); // Обновляем кнопки в меню
-            updateCartUI(); // Обновляем модалку и иконку
+            renderMenu(); 
+            updateCartUI(); 
+            updateDetailsControls(); // Обновляем кнопку в окне деталей, если оно открыто
         }
 
         function updateCartUI() {
@@ -221,7 +260,6 @@
                 `;
             });
 
-            // Расчеты
             const service = Math.round(subtotal * 0.10);
             const total = subtotal + service;
 
@@ -229,14 +267,13 @@
             document.getElementById('servicePrice').innerText = `${service} ₸`;
             document.getElementById('totalPrice').innerText = `${total} ₸`;
 
-            // Управление плавающей кнопкой
             const floatingCart = document.getElementById('floatingCart');
             if (totalItems > 0) {
                 floatingCart.style.display = 'flex';
                 document.getElementById('cartBadge').innerText = totalItems;
             } else {
                 floatingCart.style.display = 'none';
-                document.getElementById('cartModal').style.display = 'none'; // закрываем, если пусто
+                document.getElementById('cartModal').style.display = 'none'; 
             }
         }
 
@@ -245,6 +282,47 @@
             modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
         }
 
+        // Логика модального окна деталей блюда
+        function openDetails(id) {
+            currentDetailsId = id;
+            const item = menuData.find(m => m.id === id);
+            
+            document.getElementById('detailsImg').src = item.image_url;
+            document.getElementById('detailsTitle').innerText = item.name;
+            document.getElementById('detailsWeight').innerText = item.weight;
+            document.getElementById('detailsDesc').innerText = item.description;
+            document.getElementById('detailsPrice').innerText = item.price + ' ₸';
+            
+            updateDetailsControls();
+            
+            document.getElementById('itemDetailsModal').style.display = 'flex';
+        }
+
+        function closeDetails() {
+            document.getElementById('itemDetailsModal').style.display = 'none';
+            currentDetailsId = null;
+        }
+
+        function updateDetailsControls() {
+            if (currentDetailsId === null) return;
+            
+            const id = currentDetailsId;
+            const qty = cart[id] || 0;
+            const container = document.getElementById('detailsControls');
+            
+            if (qty === 0) {
+                container.innerHTML = `<button class="order-btn" style="margin-top: 0; padding: 12px 24px; width: auto;" onclick="updateCart(${id}, 1)">＋ В корзину</button>`;
+            } else {
+                container.innerHTML = `
+                    <div class="qty-control" style="transform: scale(1.1); transform-origin: right center;">
+                        <button class="qty-btn" onclick="updateCart(${id}, -1)">−</button>
+                        <span class="qty-val">${qty}</span>
+                        <button class="qty-btn" onclick="updateCart(${id}, 1)">＋</button>
+                    </div>`;
+            }
+        }
+
+        // Навигация
         function scrollToSection(sectionId, btn) {
             document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
