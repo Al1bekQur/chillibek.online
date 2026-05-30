@@ -15,9 +15,8 @@
 
         body {
             background-color: var(--bg);
-            /* Новая идеальная точечная сетка */
-            background-image: radial-gradient(rgba(133, 120, 116, 0.15) 1.5px, transparent 1.5px);
-            background-size: 20px 20px;
+            /* Идеальный перфекционистский геометрический паттерн (чистые крестики) */
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 19h-3v-3h-2v3h-3v2h3v3h2v-3h3v-2z' fill='%23d4c5b3' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E");
             
             color: var(--text-main);
             font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -64,7 +63,7 @@
 
         /* Общие стили для модальных окон */
         .cart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; display: none; flex-direction: column; justify-content: flex-end; }
-        .cart-content { background: var(--card-bg); border-radius: 25px 25px 0 0; padding: 25px; max-height: 85vh; overflow-y: auto; animation: slideUp 0.3s ease-out; position: relative; }
+        .cart-content { background: var(--card-bg); border-radius: 25px 25px 0 0; padding: 25px; max-height: 85vh; overflow-y: auto; animation: slideUp 0.3s ease-out; position: relative; touch-action: pan-y; }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         
         .cart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -86,7 +85,7 @@
         #itemDetailsModal { z-index: 3000; }
         .details-content { padding: 0; overflow: hidden; }
         .details-img-container { position: relative; width: 100%; height: 280px; }
-        .details-img { width: 100%; height: 100%; object-fit: cover; }
+        .details-img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
         .details-close-btn { position: absolute; top: 15px; right: 15px; z-index: 10; background: rgba(255, 255, 255, 0.9); box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
         .details-info { padding: 25px; }
         .details-title-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 10px; }
@@ -128,8 +127,8 @@
         <div class="cart-badge" id="cartBadge">0</div>
     </div>
 
-    <div class="cart-modal" id="cartModal">
-        <div class="cart-content">
+    <div class="cart-modal" id="cartModal" onclick="if(event.target === this) toggleCart()">
+        <div class="cart-content" id="cartContent">
             <div class="cart-header">
                 <h2>Ваш заказ</h2>
                 <button class="close-cart" onclick="toggleCart()">✕</button>
@@ -146,8 +145,8 @@
         </div>
     </div>
 
-    <div class="cart-modal" id="itemDetailsModal">
-        <div class="cart-content details-content">
+    <div class="cart-modal" id="itemDetailsModal" onclick="if(event.target === this) closeDetails()">
+        <div class="cart-content details-content" id="detailsContent">
             <div class="details-img-container">
                 <img id="detailsImg" class="details-img" src="" alt="">
                 <button class="close-cart details-close-btn" onclick="closeDetails()">✕</button>
@@ -161,7 +160,7 @@
                 <div class="details-footer">
                     <div id="detailsPrice" class="details-price">0 ₸</div>
                     <div id="detailsControls">
-                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -171,7 +170,7 @@
         const categories = ['breakfasts', 'salads', 'soups', 'main', 'pizza', 'snacks', 'drinks'];
         let menuData = []; 
         let cart = {}; 
-        let currentDetailsId = null; // Хранит ID блюда, открытого в детальном окне
+        let currentDetailsId = null; 
 
         async function loadMenu() {
             try {
@@ -198,7 +197,6 @@
                            <button class="qty-btn" onclick="updateCart(${item.id}, 1)">＋</button>
                        </div>`;
 
-                // При клике на картинку или название вызываем openDetails(item.id)
                 const itemHtml = `
                     <div class="menu-item">
                         <img class="item-img" src="${item.image_url}" alt="${item.name}" loading="lazy" onclick="openDetails(${item.id})">
@@ -207,7 +205,7 @@
                                 <h3 class="item-name" onclick="openDetails(${item.id})">${item.name}</h3>
                                 <span class="item-weight">${item.weight}</span>
                             </div>
-                            <p class="item-desc">${item.description}</p>
+                            <p class="item-desc" onclick="openDetails(${item.id})">${item.description}</p>
                             <div class="price-row">
                                 <div class="item-price">${item.price} ₸</div>
                                 <div id="btn-container-${item.id}">${btnHtml}</div>
@@ -221,7 +219,6 @@
             });
         }
 
-        // Логика корзины
         function updateCart(id, delta) {
             if (!cart[id]) cart[id] = 0;
             cart[id] += delta;
@@ -230,7 +227,7 @@
             
             renderMenu(); 
             updateCartUI(); 
-            updateDetailsControls(); // Обновляем кнопку в окне деталей, если оно открыто
+            updateDetailsControls(); 
         }
 
         function updateCartUI() {
@@ -279,10 +276,14 @@
 
         function toggleCart() {
             const modal = document.getElementById('cartModal');
-            modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+            if (modal.style.display === 'flex') {
+                closeModalWithAnim('cartModal', 'cartContent');
+            } else {
+                modal.style.display = 'flex';
+                document.getElementById('cartContent').style.transform = '';
+            }
         }
 
-        // Логика модального окна деталей блюда
         function openDetails(id) {
             currentDetailsId = id;
             const item = menuData.find(m => m.id === id);
@@ -296,11 +297,22 @@
             updateDetailsControls();
             
             document.getElementById('itemDetailsModal').style.display = 'flex';
+            document.getElementById('detailsContent').style.transform = '';
         }
 
         function closeDetails() {
-            document.getElementById('itemDetailsModal').style.display = 'none';
+            closeModalWithAnim('itemDetailsModal', 'detailsContent');
             currentDetailsId = null;
+        }
+
+        function closeModalWithAnim(modalId, contentId) {
+            const content = document.getElementById(contentId);
+            content.style.transition = 'transform 0.3s ease-in';
+            content.style.transform = 'translateY(100%)';
+            setTimeout(() => {
+                document.getElementById(modalId).style.display = 'none';
+                content.style.transition = '';
+            }, 300);
         }
 
         function updateDetailsControls() {
@@ -322,7 +334,6 @@
             }
         }
 
-        // Навигация
         function scrollToSection(sectionId, btn) {
             document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -330,7 +341,48 @@
             if (target) target.scrollIntoView({ behavior: 'smooth' });
         }
 
-        window.onload = loadMenu;
+        // ЛОГИКА СВАЙПА ВНИЗ ДЛЯ ЗАКРЫТИЯ МОДАЛОК
+        function makeSwipeable(modalId, contentId, closeFunc) {
+            const content = document.getElementById(contentId);
+            let startY = 0;
+            let currentY = 0;
+            let isDragging = false;
+
+            content.addEventListener('touchstart', e => {
+                if (content.scrollTop > 0) return; // Свайп работает только если мы в самом верху окна
+                startY = e.touches[0].clientY;
+                isDragging = true;
+                content.style.transition = 'none'; 
+            }, {passive: true});
+
+            content.addEventListener('touchmove', e => {
+                if (!isDragging) return;
+                currentY = e.touches[0].clientY;
+                const deltaY = currentY - startY;
+                if (deltaY > 0) {
+                    content.style.transform = `translateY(${deltaY}px)`;
+                }
+            }, {passive: true});
+
+            content.addEventListener('touchend', e => {
+                if (!isDragging) return;
+                isDragging = false;
+                const deltaY = currentY - startY;
+                content.style.transition = 'transform 0.3s ease-out';
+                
+                if (deltaY > 100) { // Если потянули больше чем на 100px вниз - закрываем
+                    closeFunc();
+                } else { // Иначе пружиним обратно
+                    content.style.transform = '';
+                }
+            });
+        }
+
+        window.onload = () => {
+            loadMenu();
+            makeSwipeable('itemDetailsModal', 'detailsContent', closeDetails);
+            makeSwipeable('cartModal', 'cartContent', toggleCart);
+        };
     </script>
 </body>
 </html>
