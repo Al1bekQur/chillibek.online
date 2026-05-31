@@ -5,43 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gourmet Lounge - Терминал Персонала</title>
     <style>
-        :root {
-            --bg: #121212;
-            --card: #1E1E1E;
-            --primary: #E05A33;
-            --text: #FFFFFF;
-            --text-muted: #A0A0A0;
-            --border: #2C2C2C;
-            --status-pending: #F39C12; /* Желтый */
-            --status-cooking: #3498DB; /* Синий */
-            --status-ready: #2ECC71; /* Зеленый */
-        }
-
+        :root { --bg: #121212; --card: #1E1E1E; --primary: #E05A33; --text: #FFFFFF; --text-muted: #A0A0A0; --border: #2C2C2C; --status-pending: #F39C12; --status-cooking: #3498DB; --status-ready: #2ECC71; }
         body { font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; }
         
-        /* Экран входа */
         .login-container { background: var(--card); padding: 40px 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 100%; max-width: 350px; text-align: center; margin: 10vh auto; }
         .login-container h2 { margin-top: 0; margin-bottom: 25px; }
-        input { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 1rem; background: #2C2C2C; color: white; transition: 0.2s; }
+        input { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 1rem; background: #2C2C2C; color: white; }
         input:focus { outline: none; border-color: var(--primary); }
         button { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
         button:active { transform: scale(0.98); }
         .error-msg { color: #E74C3C; font-size: 0.9rem; margin-top: 10px; display: none; }
 
-        /* Дашборд */
         .kitchen-container { display: none; max-width: 1400px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 15px;}
         .header h1 { margin: 0; font-size: 1.5rem; display: flex; align-items: center; }
         .header .pulse { display: inline-block; width: 10px; height: 10px; background-color: #2ECC71; border-radius: 50%; margin-right: 10px; animation: blink 2s infinite; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
         
-        .user-info { display: flex; align-items: center; gap: 15px; }
+        .user-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;}
         .role-badge { background: #2C2C2C; padding: 6px 12px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; border: 1px solid #444; }
-        .logout-btn { background: #2C2C2C; width: auto; padding: 8px 15px; }
+        .action-btn-sm { background: #2C2C2C; width: auto; padding: 8px 15px; }
+        .archive-btn { background: var(--primary); }
 
-        /* КАНБАН ДОСКА */
         .kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: start; }
-        @media (max-width: 900px) { .kanban-board { grid-template-columns: 1fr; } } /* Для мобилок в одну колонку */
+        @media (max-width: 900px) { .kanban-board { grid-template-columns: 1fr; } }
         
         .kanban-col { background: #181818; border-radius: 16px; padding: 15px; border: 1px solid var(--border); min-height: 500px; }
         .kanban-col h2 { margin-top: 0; font-size: 1.2rem; text-align: center; padding-bottom: 15px; border-bottom: 2px solid var(--border); }
@@ -49,23 +36,42 @@
         .kanban-col.col-cooking h2 { border-bottom-color: var(--status-cooking); }
         .kanban-col.col-ready h2 { border-bottom-color: var(--status-ready); }
 
-        .order-card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); display: flex; flex-direction: column; }
-        
+        .order-card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); display: flex; flex-direction: column; position: relative;}
         .order-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .table-badge { background: #2C2C2C; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 1.1rem; }
-        .order-time { color: var(--text-muted); font-size: 0.85rem; }
+        
+        /* ТАЙМЕРЫ */
+        .timers-box { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap;}
+        .timer-badge { display: flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; }
+        .timer-active { background: rgba(231, 76, 60, 0.15); color: #E74C3C; border: 1px solid #E74C3C; }
+        .timer-gray { background: #2C2C2C; color: var(--text-muted); border: 1px solid #444; }
         
         .order-items { flex-grow: 1; margin-bottom: 15px; }
         .item-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 1rem; padding-bottom: 6px; border-bottom: 1px dashed #2C2C2C; }
         .item-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
         .item-qty { font-weight: bold; color: var(--primary); margin-right: 8px; }
         
-        .action-btn { width: 100%; padding: 12px; border-radius: 8px; margin-top: 10px; }
+        .action-btn { width: 100%; padding: 12px; border-radius: 8px; margin-top: 10px; font-weight: bold;}
         .btn-confirm { background: var(--status-pending); color: #000; }
         .btn-cooking { background: var(--status-cooking); color: #FFF; }
         .btn-ready { background: var(--status-ready); color: #000; }
         
         .empty-state { text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 0.95rem; }
+
+        /* МОДАЛКА АРХИВА */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 2000; }
+        .modal-content { background: var(--bg); padding: 30px; border-radius: 16px; width: 100%; max-width: 800px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--border);}
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-header h2 { margin: 0; }
+        .close-btn { background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 0; width: auto;}
+        
+        .archive-stats { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; border: 1px solid var(--border);}
+        .archive-stats span { font-size: 1.5rem; font-weight: bold; color: var(--primary); }
+        
+        .archive-list { overflow-y: auto; flex-grow: 1; padding-right: 10px;}
+        .archive-item { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start;}
+        .archive-meta { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 10px;}
+        .archive-meta span { color: var(--text); font-weight: bold; margin-left: 10px;}
     </style>
 </head>
 <body>
@@ -83,13 +89,14 @@
             <h1><span class="pulse"></span>Рабочая смена</h1>
             <div class="user-info">
                 <span class="role-badge" id="roleBadge">Роль</span>
-                <button class="logout-btn" onclick="logout()">Выйти</button>
+                <button class="action-btn-sm archive-btn" onclick="openArchive()">📁 Архив</button>
+                <button class="action-btn-sm" onclick="logout()">Выйти</button>
             </div>
         </div>
         
         <div class="kanban-board">
             <div class="kanban-col col-pending">
-                <h2>Ждут подтверждения</h2>
+                <h2>Ожидают подтверждения</h2>
                 <div id="list-pending"></div>
             </div>
             <div class="kanban-col col-cooking">
@@ -97,23 +104,66 @@
                 <div id="list-cooking"></div>
             </div>
             <div class="kanban-col col-ready">
-                <h2>Готово (Ждут выдачи)</h2>
+                <h2>Готово (Выдача)</h2>
                 <div id="list-ready"></div>
             </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="archiveModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Архив заказов</h2>
+                <button class="close-btn" onclick="closeArchive()">✕</button>
+            </div>
+            <div class="archive-stats">
+                Всего обслужено за сегодня: <span id="archiveCount">0</span>
+            </div>
+            <div class="archive-list" id="archiveList"></div>
         </div>
     </div>
 
     <script>
         const API_URL = 'https://kali.pythonanywhere.com/api';
         let fetchInterval;
-        let currentUserRole = ''; // Храним роль: 'waiter' или 'chef'
+        let timerInterval;
+        let currentUserRole = ''; 
+
+        // Парсинг дат (учитываем формат Python YYYY-MM-DD HH:MM:SS)
+        function parseDate(dateStr) {
+            if (!dateStr) return null;
+            return new Date(dateStr.replace(' ', 'T'));
+        }
+
+        // Форматирование: 21:26 | 31.05.26
+        function formatDateTime(dateStr) {
+            const d = parseDate(dateStr);
+            if (!d) return '';
+            const hh = d.getHours().toString().padStart(2, '0');
+            const mm = d.getMinutes().toString().padStart(2, '0');
+            const DD = d.getDate().toString().padStart(2, '0');
+            const MM = (d.getMonth() + 1).toString().padStart(2, '0');
+            const YY = d.getFullYear().toString().slice(2);
+            return `${hh}:${mm} | ${DD}.${MM}.${YY}`;
+        }
+
+        // Вычисление разницы во времени в формате MM:SS
+        function calcDuration(startStr, endStr) {
+            const start = parseDate(startStr);
+            const end = endStr ? parseDate(endStr) : new Date();
+            if (!start) return "00:00";
+            let diffSec = Math.floor((end - start) / 1000);
+            if (diffSec < 0) diffSec = 0;
+            const m = Math.floor(diffSec / 60).toString().padStart(2, '0');
+            const s = (diffSec % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
 
         async function login() {
             const user = document.getElementById('username').value;
             const pass = document.getElementById('password').value;
             const err = document.getElementById('loginError');
             err.style.display = 'none';
-
             if (!user || !pass) { err.innerText = "Заполните все поля!"; err.style.display = 'block'; return; }
 
             try {
@@ -124,17 +174,16 @@
                 const data = await res.json();
                 
                 if (res.ok && data.success) {
-                    currentUserRole = data.role; // Запоминаем кто вошел
-                    
+                    currentUserRole = data.role; 
                     document.getElementById('loginScreen').style.display = 'none';
                     document.getElementById('kitchenPanel').style.display = 'block';
                     
-                    // Красивый бейдж роли
                     const roleText = currentUserRole === 'waiter' ? '👤 Официант' : (currentUserRole === 'chef' ? '👨‍🍳 Повар' : 'Админ');
                     document.getElementById('roleBadge').innerText = roleText;
 
                     loadOrders();
                     fetchInterval = setInterval(loadOrders, 3000);
+                    timerInterval = setInterval(updateTickers, 1000); // Запуск живых таймеров
                 } else {
                     err.innerText = data.message || "Доступ запрещен.";
                     err.style.display = 'block';
@@ -143,12 +192,9 @@
         }
 
         function logout() {
-            clearInterval(fetchInterval);
-            currentUserRole = '';
-            document.getElementById('username').value = '';
-            document.getElementById('password').value = '';
-            document.getElementById('kitchenPanel').style.display = 'none';
-            document.getElementById('loginScreen').style.display = 'block';
+            clearInterval(fetchInterval); clearInterval(timerInterval);
+            currentUserRole = ''; document.getElementById('username').value = ''; document.getElementById('password').value = '';
+            document.getElementById('kitchenPanel').style.display = 'none'; document.getElementById('loginScreen').style.display = 'block';
         }
 
         async function loadOrders() {
@@ -156,6 +202,7 @@
                 const res = await fetch(`${API_URL}/orders`);
                 const orders = await res.json();
                 renderOrders(orders);
+                updateTickers(); // Сразу обновляем таймеры после рендера
             } catch (e) { console.error("Ошибка загрузки заказов:", e); }
         }
 
@@ -164,54 +211,55 @@
             const listCooking = document.getElementById('list-cooking');
             const listReady = document.getElementById('list-ready');
             
-            listPending.innerHTML = '';
-            listCooking.innerHTML = '';
-            listReady.innerHTML = '';
-
+            listPending.innerHTML = ''; listCooking.innerHTML = ''; listReady.innerHTML = '';
             let counts = { pending: 0, cooking: 0, ready: 0 };
 
             orders.forEach(order => {
-                const timeStr = order.created_at.split(' ')[1].substring(0, 5);
-                
                 let itemsHtml = '';
-                order.items.forEach(item => {
-                    itemsHtml += `<div class="item-row"><span><span class="item-qty">${item.qty}x</span> ${item.name}</span></div>`;
-                });
+                order.items.forEach(item => { itemsHtml += `<div class="item-row"><span><span class="item-qty">${item.qty}x</span> ${item.name}</span></div>`; });
 
-                // ЛОГИКА РАЗДЕЛЕНИЯ КНОПОК ПО РОЛЯМ
                 let actionBtn = '';
-                
+                let timersHtml = '<div class="timers-box">';
+
+                // ЛОГИКА ТАЙМЕРОВ И КНОПОК
                 if (order.status === 'pending') {
                     counts.pending++;
+                    // Таймер ожидания (живой)
+                    timersHtml += `<div class="timer-badge timer-active" data-start="${order.created_at}">Ожидание: <span>00:00</span></div>`;
+                    
                     if (currentUserRole === 'waiter' || currentUserRole === 'admin') {
-                        actionBtn = `<button class="action-btn btn-confirm" onclick="updateOrderStatus(${order.id}, 'cooking')">👍 Подтвердить заказ</button>`;
-                    } else {
-                        actionBtn = `<div class="empty-state" style="padding: 10px;">Ждем официанта</div>`;
-                    }
+                        actionBtn = `<button class="action-btn btn-confirm" onclick="updateOrderStatus(${order.id}, 'cooking')">👍 Одобрить заказ</button>`;
+                    } else { actionBtn = `<div class="empty-state" style="padding: 10px;">Ждем официанта</div>`; }
                 } 
                 else if (order.status === 'cooking') {
                     counts.cooking++;
+                    // Таймер ожидания (серый, замороженный)
+                    timersHtml += `<div class="timer-badge timer-gray">Одобрен за: <span>${calcDuration(order.created_at, order.approved_at)}</span></div>`;
+                    // Таймер готовки (живой)
+                    timersHtml += `<div class="timer-badge timer-active" data-start="${order.approved_at}">Готовка: <span>00:00</span></div>`;
+
                     if (currentUserRole === 'chef' || currentUserRole === 'admin') {
-                        actionBtn = `<button class="action-btn btn-cooking" onclick="updateOrderStatus(${order.id}, 'ready')">✅ Блюда готовы</button>`;
-                    } else {
-                        actionBtn = `<div class="empty-state" style="padding: 10px;">Готовится на кухне...</div>`;
-                    }
+                        actionBtn = `<button class="action-btn btn-cooking" onclick="updateOrderStatus(${order.id}, 'ready')">✅ Завершить (Готово)</button>`;
+                    } else { actionBtn = `<div class="empty-state" style="padding: 10px;">Готовится поваром...</div>`; }
                 } 
                 else if (order.status === 'ready') {
                     counts.ready++;
+                    // Оба таймера серые
+                    timersHtml += `<div class="timer-badge timer-gray">Одобрен за: <span>${calcDuration(order.created_at, order.approved_at)}</span></div>`;
+                    timersHtml += `<div class="timer-badge timer-gray">Приготовлен за: <span>${calcDuration(order.approved_at, order.ready_at)}</span></div>`;
+
                     if (currentUserRole === 'waiter' || currentUserRole === 'admin') {
                         actionBtn = `<button class="action-btn btn-ready" onclick="updateOrderStatus(${order.id}, 'completed')">🍽️ Отдано гостю</button>`;
-                    } else {
-                        actionBtn = `<div class="empty-state" style="padding: 10px;">Ждем забор официантом</div>`;
-                    }
+                    } else { actionBtn = `<div class="empty-state" style="padding: 10px;">Ждем забор официантом</div>`; }
                 }
+                timersHtml += '</div>';
 
                 const cardHtml = `
                     <div class="order-card">
                         <div class="order-header">
                             <div class="table-badge">Стол ${order.table_number}</div>
-                            <div class="order-time">#${order.id} • ${timeStr}</div>
                         </div>
+                        ${timersHtml}
                         <div class="order-items">${itemsHtml}</div>
                         ${actionBtn}
                     </div>
@@ -227,15 +275,69 @@
             if (counts.ready === 0) listReady.innerHTML = '<div class="empty-state">Все выдано</div>';
         }
 
+        // Функция обновления живых таймеров
+        function updateTickers() {
+            document.querySelectorAll('.timer-active').forEach(badge => {
+                const startStr = badge.getAttribute('data-start');
+                const span = badge.querySelector('span');
+                if (startStr && span) {
+                    span.innerText = calcDuration(startStr, null);
+                }
+            });
+        }
+
         async function updateOrderStatus(orderId, newStatus) {
             try {
                 const res = await fetch(`${API_URL}/orders/${orderId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: newStatus })
                 });
                 if (res.ok) loadOrders(); 
             } catch (e) { alert("Ошибка при обновлении статуса."); }
+        }
+
+        // --- ЛОГИКА АРХИВА ---
+        async function openArchive() {
+            document.getElementById('archiveModal').style.display = 'flex';
+            try {
+                const res = await fetch(`${API_URL}/orders/archive`);
+                const orders = await res.json();
+                
+                document.getElementById('archiveCount').innerText = orders.length;
+                const list = document.getElementById('archiveList');
+                list.innerHTML = '';
+
+                if(orders.length === 0) {
+                    list.innerHTML = '<div class="empty-state">Архив пуст. Вы еще не завершили ни одного заказа.</div>';
+                    return;
+                }
+
+                orders.forEach(o => {
+                    // Общее время = ready_at минус created_at
+                    const totalTime = calcDuration(o.created_at, o.ready_at);
+                    const formattedDate = formatDateTime(o.created_at);
+                    
+                    let itemsStr = o.items.map(i => `${i.qty}x ${i.name}`).join(', ');
+
+                    list.innerHTML += `
+                        <div class="archive-item">
+                            <div style="flex-grow: 1; margin-right: 15px;">
+                                <div class="table-badge" style="display:inline-block; margin-bottom: 8px;">Стол ${o.table_number}</div>
+                                <div class="archive-meta">${formattedDate}</div>
+                                <div>${itemsStr}</div>
+                            </div>
+                            <div style="text-align: right; min-width: 120px;">
+                                <div style="color: var(--primary); font-weight: bold; font-size: 1.1rem; margin-bottom: 5px;">${o.total_price} ₸</div>
+                                <div class="timer-badge timer-gray" style="display:inline-flex;">Итог: <span>${totalTime}</span></div>
+                            </div>
+                        </div>
+                    `;
+                });
+            } catch (e) { alert("Ошибка загрузки архива"); }
+        }
+
+        function closeArchive() {
+            document.getElementById('archiveModal').style.display = 'none';
         }
     </script>
 </body>
