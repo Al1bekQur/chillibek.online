@@ -5,73 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gourmet Lounge - Панель управления</title>
     <style>
-        :root {
-            --bg: #F4F6F8;
-            --card: #FFFFFF;
-            --primary: #E05A33;
-            --text: #332B29;
-            --text-muted: #857874;
-            --border: #E1E4E8;
-        }
-
-        body {
-            font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-        }
-
-        /* Экран входа */
+        :root { --bg: #F4F6F8; --card: #FFFFFF; --primary: #E05A33; --text: #332B29; --text-muted: #857874; --border: #E1E4E8; }
+        body { font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; justify-content: center; }
         .login-container { background: var(--card); padding: 40px 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); width: 100%; max-width: 350px; text-align: center; margin-top: 10vh; }
         .login-container h2 { margin-top: 0; margin-bottom: 25px; }
-
         input, select { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 1rem; background: #FAFBFC; transition: 0.2s; }
         input:focus, select:focus { outline: none; border-color: var(--primary); background: #FFF; }
-
         button { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
         button:active { transform: scale(0.98); }
-        
         .error-msg { color: #dc3545; font-size: 0.9rem; margin-top: 10px; display: none; }
-
-        /* Панель администратора */
         .admin-container { width: 100%; max-width: 900px; display: none; padding-bottom: 50px; }
-        
         .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 15px; }
         .admin-header h2 { margin: 0; }
-        
         .header-controls { display: flex; gap: 15px; align-items: center; position: relative; }
         .logout-btn { background: #E1E4E8; color: var(--text); width: auto; padding: 10px 20px; }
-        
-        /* Живой поиск */
         .search-box { position: relative; }
         .search-box input { margin-bottom: 0; padding: 10px 15px; width: 250px; border-radius: 20px; }
         .search-results { position: absolute; top: 110%; left: 0; width: 100%; background: var(--card); border-radius: 10px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); max-height: 300px; overflow-y: auto; z-index: 100; display: none; border: 1px solid var(--border); }
         .search-result-item { padding: 12px 15px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
         .search-result-item:hover { background: #f8f9fa; }
-        .search-result-item:last-child { border-bottom: none; }
-
         .add-item-box { background: var(--card); padding: 25px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-bottom: 30px; }
         .flex-row { display: flex; gap: 15px; }
-        
-        /* Списки меню и категории */
         .category-header { font-size: 1.2rem; font-weight: 800; margin: 30px 0 15px 0; color: var(--text); padding-bottom: 5px; border-bottom: 2px solid var(--primary); display: inline-block; }
-        
         .menu-list { background: var(--card); border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); overflow: hidden; margin-bottom: 20px; }
         .menu-row { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid var(--border); }
         .menu-row:last-child { border-bottom: none; }
-        
         .item-details { flex-grow: 1; }
         .item-details h4 { margin: 0 0 5px 0; }
         .item-details p { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
-        
         .row-controls { display: flex; gap: 10px; }
         .edit-btn { background: #E1E4E8; color: var(--text); width: auto; padding: 8px 15px; font-size: 0.9rem; border-radius: 8px; }
         .delete-btn { background: #ffe3e3; color: #dc3545; width: auto; padding: 8px 15px; font-size: 0.9rem; border-radius: 8px; }
-
-        /* Модальное окно редактирования */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: var(--card); padding: 30px; border-radius: 16px; width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
         .modal-content h3 { margin-top: 0; }
@@ -123,8 +87,7 @@
             <button onclick="validateAndAdd()">Добавить в меню</button>
         </div>
 
-        <div id="menuCategoriesContainer">
-            </div>
+        <div id="menuCategoriesContainer"></div>
     </div>
 
     <div class="modal-overlay" id="editModal" onclick="if(event.target === this) closeEditModal()">
@@ -150,41 +113,32 @@
             
             <div class="modal-actions">
                 <button class="cancel-btn" onclick="closeEditModal()">Отмена</button>
-                <button onclick="alert('Данные готовы! Сохранение в базу напишем на следующем шаге.')">Сохранить</button>
+                <button onclick="saveEdit()">Сохранить</button>
             </div>
         </div>
     </div>
 
     <script>
-        let globalMenuData = []; // Храним всё меню для поиска и редактирования
+        const API_URL = 'https://kali.pythonanywhere.com/api';
+        let globalMenuData = [];
 
         const categoryNames = {
-            'breakfasts': '🍳 Завтраки',
-            'salads': '🥗 Салаты',
-            'soups': '🍲 Супы',
-            'main': '🥩 Горячие блюда',
-            'pizza': '🍕 Пиццы',
-            'snacks': '🍟 Закуски',
-            'drinks': '🍹 Напитки'
+            'breakfasts': '🍳 Завтраки', 'salads': '🥗 Салаты', 'soups': '🍲 Супы',
+            'main': '🥩 Горячие блюда', 'pizza': '🍕 Пиццы', 'snacks': '🍟 Закуски', 'drinks': '🍹 Напитки'
         };
 
-        // 1. Авторизация
+        // АВТОРИЗАЦИЯ
         async function login() {
             const user = document.getElementById('username').value;
             const pass = document.getElementById('password').value;
             const err = document.getElementById('loginError');
             err.style.display = 'none';
 
-            if (!user || !pass) {
-                err.innerText = "Заполните все поля!";
-                err.style.display = 'block';
-                return;
-            }
+            if (!user || !pass) { err.innerText = "Заполните все поля!"; err.style.display = 'block'; return; }
 
             try {
-                const res = await fetch('https://kali.pythonanywhere.com/api/staff/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                const res = await fetch(`${API_URL}/staff/login`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username: user, password: pass })
                 });
                 const data = await res.json();
@@ -197,10 +151,7 @@
                     err.innerText = data.message || "Доступ запрещен.";
                     err.style.display = 'block';
                 }
-            } catch (e) {
-                err.innerText = "Ошибка сервера.";
-                err.style.display = 'block';
-            }
+            } catch (e) { err.innerText = "Ошибка сервера."; err.style.display = 'block'; }
         }
 
         function logout() {
@@ -210,33 +161,27 @@
             document.getElementById('loginScreen').style.display = 'block';
         }
 
-        // 2. Загрузка и рендер меню
+        // ЗАГРУЗКА МЕНЮ
         async function loadAdminMenu() {
             try {
-                const res = await fetch('https://kali.pythonanywhere.com/api/menu');
+                const res = await fetch(`${API_URL}/menu`);
                 globalMenuData = await res.json();
                 renderCategorizedMenu();
-            } catch (e) {
-                console.error("Ошибка загрузки:", e);
-            }
+            } catch (e) { console.error("Ошибка загрузки:", e); }
         }
 
         function renderCategorizedMenu() {
             const container = document.getElementById('menuCategoriesContainer');
             container.innerHTML = "";
-
-            // Группируем блюда по категориям
             const grouped = {};
             globalMenuData.forEach(item => {
                 if (!grouped[item.category]) grouped[item.category] = [];
                 grouped[item.category].push(item);
             });
 
-            // Выводим категории
             for (const cat in categoryNames) {
                 if (grouped[cat] && grouped[cat].length > 0) {
                     let catHtml = `<div class="category-header">${categoryNames[cat]}</div><div class="menu-list">`;
-                    
                     grouped[cat].forEach(item => {
                         catHtml += `
                             <div class="menu-row">
@@ -246,45 +191,92 @@
                                 </div>
                                 <div class="row-controls">
                                     <button class="edit-btn" onclick="openEditModal(${item.id})">Редактировать</button>
-                                    <button class="delete-btn" onclick="alert('Удаление подключим к базе в следующем шаге!')">Удалить</button>
+                                    <button class="delete-btn" onclick="deleteItem(${item.id}, '${item.name}')">Удалить</button>
                                 </div>
                             </div>
                         `;
                     });
-                    
                     catHtml += `</div>`;
                     container.innerHTML += catHtml;
                 }
             }
         }
 
-        // 3. Жесткая валидация добавления
-        function validateAndAdd() {
+        // 1. ДОБАВЛЕНИЕ
+        async function validateAndAdd() {
             const err = document.getElementById('addError');
-            const name = document.getElementById('newName').value.trim();
-            const desc = document.getElementById('newDesc').value.trim();
-            const weight = document.getElementById('newWeight').value.trim();
-            const price = document.getElementById('newPrice').value.trim();
-            const img = document.getElementById('newImg').value.trim();
+            const data = {
+                category: document.getElementById('newCat').value,
+                name: document.getElementById('newName').value.trim(),
+                description: document.getElementById('newDesc').value.trim(),
+                weight: document.getElementById('newWeight').value.trim(),
+                price: document.getElementById('newPrice').value.trim(),
+                image_url: document.getElementById('newImg').value.trim()
+            };
 
-            if (!name || !desc || !weight || !price || !img) {
-                err.innerText = "Пожалуйста, заполните все поля перед добавлением!";
+            if (!data.name || !data.description || !data.weight || !data.price || !data.image_url) {
+                err.innerText = "Пожалуйста, заполните все поля!";
                 err.style.display = 'block';
                 return;
             }
-            
             err.style.display = 'none';
-            alert('Все поля заполнены верно! Отправку на сервер настроим на бэкенде.');
+
+            try {
+                const res = await fetch(`${API_URL}/menu/add`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (res.ok) {
+                    // Очищаем форму и обновляем список
+                    document.getElementById('newName').value = '';
+                    document.getElementById('newDesc').value = '';
+                    document.getElementById('newWeight').value = '';
+                    document.getElementById('newPrice').value = '';
+                    document.getElementById('newImg').value = '';
+                    loadAdminMenu(); 
+                }
+            } catch (e) { alert("Ошибка при добавлении."); }
         }
 
-        // 4. Интерактивный живой поиск
+        // 2. УДАЛЕНИЕ
+        async function deleteItem(id, name) {
+            // Запрашиваем подтверждение, чтобы случайно не кликнуть
+            if (!confirm(`Вы точно хотите удалить "${name}" из меню?`)) return;
+
+            try {
+                const res = await fetch(`${API_URL}/menu/delete/${id}`, { method: 'DELETE' });
+                if (res.ok) loadAdminMenu();
+            } catch (e) { alert("Ошибка при удалении."); }
+        }
+
+        // 3. СОХРАНЕНИЕ РЕДАКТИРОВАНИЯ
+        async function saveEdit() {
+            const id = document.getElementById('editId').value;
+            const data = {
+                category: document.getElementById('editCat').value,
+                name: document.getElementById('editName').value.trim(),
+                description: document.getElementById('editDesc').value.trim(),
+                weight: document.getElementById('editWeight').value.trim(),
+                price: document.getElementById('editPrice').value.trim(),
+                image_url: document.getElementById('editImg').value.trim()
+            };
+
+            try {
+                const res = await fetch(`${API_URL}/menu/edit/${id}`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (res.ok) {
+                    closeEditModal();
+                    loadAdminMenu(); // Обновляем список на экране
+                }
+            } catch (e) { alert("Ошибка при сохранении."); }
+        }
+
+        // ПОИСК
         function handleSearch(query) {
             const resultsBox = document.getElementById('searchResults');
-            if (query.length === 0) {
-                resultsBox.style.display = 'none';
-                return;
-            }
-
+            if (query.length === 0) { resultsBox.style.display = 'none'; return; }
             const lowerQuery = query.toLowerCase();
             const matches = globalMenuData.filter(item => item.name.toLowerCase().includes(lowerQuery));
 
@@ -295,14 +287,12 @@
                         <span style="color: var(--text-muted); font-size: 0.85rem;">${item.price} ₸</span>
                     </div>
                 `).join('');
-                resultsBox.style.display = 'block';
             } else {
                 resultsBox.innerHTML = `<div class="search-result-item" style="color: var(--text-muted); justify-content: center;">Ничего не найдено</div>`;
-                resultsBox.style.display = 'block';
             }
+            resultsBox.style.display = 'block';
         }
 
-        // 5. Логика Модального окна редактирования
         function openEditFromSearch(id) {
             document.getElementById('searchResults').style.display = 'none';
             document.getElementById('searchInput').value = '';
@@ -312,7 +302,6 @@
         function openEditModal(id) {
             const item = globalMenuData.find(m => m.id === id);
             if (!item) return;
-
             document.getElementById('editId').value = item.id;
             document.getElementById('editCat').value = item.category;
             document.getElementById('editName').value = item.name;
@@ -320,19 +309,13 @@
             document.getElementById('editWeight').value = item.weight;
             document.getElementById('editPrice').value = item.price;
             document.getElementById('editImg').value = item.image_url;
-
             document.getElementById('editModal').style.display = 'flex';
         }
 
-        function closeEditModal() {
-            document.getElementById('editModal').style.display = 'none';
-        }
-
-        // Закрываем поиск, если кликнули мимо
+        function closeEditModal() { document.getElementById('editModal').style.display = 'none'; }
+        
         document.addEventListener('click', function(e) {
-            if (!e.target.closest('.search-box')) {
-                document.getElementById('searchResults').style.display = 'none';
-            }
+            if (!e.target.closest('.search-box')) { document.getElementById('searchResults').style.display = 'none'; }
         });
     </script>
 </body>
