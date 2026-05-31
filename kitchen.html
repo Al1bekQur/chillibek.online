@@ -41,7 +41,6 @@
         .table-badge { background: #2C2C2C; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 1.1rem; }
         .order-time { color: var(--text-muted); font-size: 0.85rem; }
         
-        /* ТАЙМЕРЫ */
         .timers-box { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap;}
         .timer-badge { display: flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; }
         .timer-active { background: rgba(231, 76, 60, 0.15); color: #E74C3C; border: 1px solid #E74C3C; }
@@ -52,10 +51,12 @@
         .item-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
         .item-qty { font-weight: bold; color: var(--primary); margin-right: 8px; }
         
-        .action-btn { width: 100%; padding: 12px; border-radius: 8px; margin-top: 10px; font-weight: bold;}
-        .btn-confirm { background: var(--status-pending); color: #000; }
-        .btn-cooking { background: var(--status-cooking); color: #FFF; }
-        .btn-ready { background: var(--status-ready); color: #000; }
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        .action-btn { width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; margin-top: 0; }
+        .btn-confirm { background: var(--status-pending); color: #000; flex: 1; }
+        .btn-reject { background: transparent; color: #E74C3C; border: 1px solid #E74C3C; flex: 1; }
+        .btn-cooking { background: var(--status-cooking); color: #FFF; margin-top: 10px; }
+        .btn-ready { background: var(--status-ready); color: #000; margin-top: 10px; }
         
         .empty-state { text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 0.95rem; }
 
@@ -130,14 +131,11 @@
         let timerInterval;
         let currentUserRole = ''; 
 
-        // ИСПРАВЛЕНИЕ: Добавляем 'Z', чтобы браузер понимал, что серверное время - это UTC (Гринвич)
-        // Браузер сам переведет его в время Астаны (UTC+5)
         function parseDate(dateStr) {
             if (!dateStr) return null;
             return new Date(dateStr.replace(' ', 'T') + 'Z');
         }
 
-        // Форматирование: 21:26 | 31.05.26 (Уже в правильном часовом поясе)
         function formatDateTime(dateStr) {
             const d = parseDate(dateStr);
             if (!d) return '';
@@ -149,7 +147,6 @@
             return `${hh}:${mm} | ${DD}.${MM}.${YY}`;
         }
         
-        // Только время для карточек
         function formatTime(dateStr) {
             const d = parseDate(dateStr);
             if (!d) return '';
@@ -158,7 +155,6 @@
             return `${hh}:${mm}`;
         }
 
-        // Вычисление разницы во времени (Таймеры теперь работают как часы)
         function calcDuration(startStr, endStr) {
             const start = parseDate(startStr);
             const end = endStr ? parseDate(endStr) : new Date();
@@ -229,7 +225,7 @@
                 let itemsHtml = '';
                 order.items.forEach(item => { itemsHtml += `<div class="item-row"><span><span class="item-qty">${item.qty}x</span> ${item.name}</span></div>`; });
 
-                const timeStr = formatTime(order.created_at); // Берем правильное локальное время
+                const timeStr = formatTime(order.created_at); 
                 
                 let actionBtn = '';
                 let timersHtml = '<div class="timers-box">';
@@ -239,7 +235,13 @@
                     timersHtml += `<div class="timer-badge timer-active" data-start="${order.created_at}">Ожидание: <span>00:00</span></div>`;
                     
                     if (currentUserRole === 'waiter' || currentUserRole === 'admin') {
-                        actionBtn = `<button class="action-btn btn-confirm" onclick="updateOrderStatus(${order.id}, 'cooking')">👍 Одобрить заказ</button>`;
+                        // ДВЕ КНОПКИ ДЛЯ ОФИЦИАНТА
+                        actionBtn = `
+                            <div class="btn-group">
+                                <button class="action-btn btn-confirm" onclick="updateOrderStatus(${order.id}, 'cooking')">👍 Одобрить</button>
+                                <button class="action-btn btn-reject" onclick="rejectOrder(${order.id})">❌ Отклонить</button>
+                            </div>
+                        `;
                     } else { actionBtn = `<div class="empty-state" style="padding: 10px;">Ждем официанта</div>`; }
                 } 
                 else if (order.status === 'cooking') {
@@ -302,6 +304,17 @@
                 });
                 if (res.ok) loadOrders(); 
             } catch (e) { alert("Ошибка при обновлении статуса."); }
+        }
+
+        // НОВАЯ ФУНКЦИЯ: Удаление заказа официантом
+        async function rejectOrder(orderId) {
+            if (!confirm("Вы уверены, что хотите отклонить этот заказ? Он исчезнет навсегда.")) return;
+            try {
+                const res = await fetch(`${API_URL}/orders/${orderId}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) loadOrders(); // Мгновенно обновляем интерфейс
+            } catch (e) { alert("Ошибка при отклонении заказа."); }
         }
 
         // --- ЛОГИКА АРХИВА ---
