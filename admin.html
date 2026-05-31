@@ -1,1 +1,268 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gourmet Lounge - Панель управления</title>
+    <style>
+        :root {
+            --bg: #F4F6F8;
+            --card: #FFFFFF;
+            --primary: #E05A33;
+            --text: #332B29;
+            --border: #E1E4E8;
+        }
 
+        body {
+            font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Экран входа */
+        .login-container {
+            background: var(--card);
+            padding: 40px 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            width: 100%;
+            max-width: 350px;
+            text-align: center;
+            margin-top: 10vh;
+        }
+
+        .login-container h2 {
+            margin-top: 0;
+            margin-bottom: 25px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 14px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-sizing: border-box;
+            font-size: 1rem;
+            background: #FAFBFC;
+            transition: 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: #FFF;
+        }
+
+        button {
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:active { transform: scale(0.98); }
+        button:hover { opacity: 0.9; }
+
+        .error-msg {
+            color: #dc3545;
+            font-size: 0.9rem;
+            margin-top: 10px;
+            display: none;
+        }
+
+        /* Панель администратора */
+        .admin-container {
+            width: 100%;
+            max-width: 900px;
+            display: none;
+        }
+
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .logout-btn {
+            background: #E1E4E8;
+            color: var(--text);
+            width: auto;
+            padding: 10px 20px;
+        }
+
+        .add-item-box {
+            background: var(--card);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            margin-bottom: 30px;
+        }
+
+        .flex-row {
+            display: flex;
+            gap: 15px;
+        }
+
+        .menu-list {
+            background: var(--card);
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            overflow: hidden;
+        }
+
+        .menu-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .menu-row:last-child { border-bottom: none; }
+
+        .item-details h4 { margin: 0 0 5px 0; }
+        .item-details p { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
+        
+        .delete-btn {
+            background: #ffe3e3;
+            color: #dc3545;
+            width: auto;
+            padding: 8px 15px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-container" id="loginScreen">
+        <h2>Вход в панель</h2>
+        <input type="text" id="username" placeholder="Логин (admin)">
+        <input type="password" id="password" placeholder="Пароль">
+        <button onclick="login()">Войти</button>
+        <div class="error-msg" id="loginError">Неверный логин или пароль</div>
+    </div>
+
+    <div class="admin-container" id="adminPanel">
+        <div class="admin-header">
+            <h2>Управление меню</h2>
+            <button class="logout-btn" onclick="logout()">Выйти</button>
+        </div>
+
+        <div class="add-item-box">
+            <h3 style="margin-top: 0;">Добавить новое блюдо</h3>
+            <select id="newCat">
+                <option value="breakfasts">🍳 Завтраки</option>
+                <option value="salads">🥗 Салаты</option>
+                <option value="soups">🍲 Супы</option>
+                <option value="main">🥩 Горячие блюда</option>
+                <option value="pizza">🍕 Пиццы</option>
+                <option value="snacks">🍟 Закуски</option>
+                <option value="drinks">🍹 Напитки</option>
+            </select>
+            <input type="text" id="newName" placeholder="Название (например: Стейк Рибай)">
+            <input type="text" id="newDesc" placeholder="Состав (описание блюда)">
+            <div class="flex-row">
+                <input type="text" id="newWeight" placeholder="Граммовка (например: 300г)">
+                <input type="number" id="newPrice" placeholder="Цена (₸)">
+            </div>
+            <input type="text" id="newImg" placeholder="Ссылка на фотографию (https://...)">
+            <button onclick="alert('Это визуальный интерфейс. Подключение к базе для сохранения сделаем на следующем этапе!')">Добавить в меню</button>
+        </div>
+
+        <h3 style="margin-bottom: 15px;">Текущие позиции</h3>
+        <div class="menu-list" id="adminMenuList">
+            </div>
+    </div>
+
+    <script>
+        // Логика авторизации
+        async function login() {
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            const err = document.getElementById('loginError');
+            
+            // Прячем ошибку перед новым запросом
+            err.style.display = 'none';
+
+            if (!user || !pass) {
+                err.innerText = "Заполните все поля!";
+                err.style.display = 'block';
+                return;
+            }
+
+            try {
+                // Стучимся на наш секьюрный эндпоинт, который мы создали в PythonAnywhere
+                const res = await fetch('https://kali.pythonanywhere.com/api/staff/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok && data.success) {
+                    if (data.role === 'admin') {
+                        // Если роль админ - пускаем внутрь
+                        document.getElementById('loginScreen').style.display = 'none';
+                        document.getElementById('adminPanel').style.display = 'block';
+                        loadAdminMenu();
+                    } else {
+                        err.innerText = "Доступ запрещен. Вы не администратор.";
+                        err.style.display = 'block';
+                    }
+                } else {
+                    err.innerText = data.message || "Ошибка входа";
+                    err.style.display = 'block';
+                }
+            } catch (e) {
+                err.innerText = "Ошибка соединения с сервером.";
+                err.style.display = 'block';
+            }
+        }
+
+        // Выход из панели
+        function logout() {
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('adminPanel').style.display = 'none';
+            document.getElementById('loginScreen').style.display = 'block';
+        }
+
+        // Загрузка текущего меню
+        async function loadAdminMenu() {
+            try {
+                const res = await fetch('https://kali.pythonanywhere.com/api/menu');
+                const menuData = await res.json();
+                const list = document.getElementById('adminMenuList');
+                list.innerHTML = "";
+
+                menuData.forEach(item => {
+                    list.innerHTML += `
+                        <div class="menu-row">
+                            <div class="item-details">
+                                <h4>${item.name}</h4>
+                                <p>${item.price} ₸ • ${item.weight}</p>
+                            </div>
+                            <button class="delete-btn" onclick="alert('Удаление подключим вместе с добавлением в следующем шаге!')">Удалить</button>
+                        </div>
+                    `;
+                });
+            } catch (e) {
+                console.error("Ошибка загрузки меню:", e);
+            }
+        }
+    </script>
+</body>
+</html>
