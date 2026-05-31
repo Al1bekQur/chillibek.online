@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gourmet Lounge - Терминал Официанта</title>
+    <title>Gourmet Lounge - Терминал Персонала</title>
     <style>
         :root {
             --bg: #121212;
@@ -12,8 +12,9 @@
             --text: #FFFFFF;
             --text-muted: #A0A0A0;
             --border: #2C2C2C;
-            --status-pending: #F39C12;
-            --status-confirmed: #3498DB;
+            --status-pending: #F39C12; /* Желтый */
+            --status-cooking: #3498DB; /* Синий */
+            --status-ready: #2ECC71; /* Зеленый */
         }
 
         body { font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; }
@@ -27,44 +28,51 @@
         button:active { transform: scale(0.98); }
         .error-msg { color: #E74C3C; font-size: 0.9rem; margin-top: 10px; display: none; }
 
-        /* Дашборд Кухни */
-        .kitchen-container { display: none; max-width: 1200px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-        .header h1 { margin: 0; font-size: 1.8rem; }
+        /* Дашборд */
+        .kitchen-container { display: none; max-width: 1400px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+        .header h1 { margin: 0; font-size: 1.5rem; display: flex; align-items: center; }
         .header .pulse { display: inline-block; width: 10px; height: 10px; background-color: #2ECC71; border-radius: 50%; margin-right: 10px; animation: blink 2s infinite; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-        .logout-btn { background: #2C2C2C; width: auto; padding: 10px 20px; }
+        
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .role-badge { background: #2C2C2C; padding: 6px 12px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; border: 1px solid #444; }
+        .logout-btn { background: #2C2C2C; width: auto; padding: 8px 15px; }
 
-        .orders-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        /* КАНБАН ДОСКА */
+        .kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: start; }
+        @media (max-width: 900px) { .kanban-board { grid-template-columns: 1fr; } } /* Для мобилок в одну колонку */
         
-        .order-card { background: var(--card); border-radius: 16px; padding: 20px; border-top: 4px solid var(--border); display: flex; flex-direction: column; }
-        .order-card.pending { border-top-color: var(--status-pending); }
-        .order-card.confirmed { border-top-color: var(--status-confirmed); }
+        .kanban-col { background: #181818; border-radius: 16px; padding: 15px; border: 1px solid var(--border); min-height: 500px; }
+        .kanban-col h2 { margin-top: 0; font-size: 1.2rem; text-align: center; padding-bottom: 15px; border-bottom: 2px solid var(--border); }
+        .kanban-col.col-pending h2 { border-bottom-color: var(--status-pending); }
+        .kanban-col.col-cooking h2 { border-bottom-color: var(--status-cooking); }
+        .kanban-col.col-ready h2 { border-bottom-color: var(--status-ready); }
+
+        .order-card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); display: flex; flex-direction: column; }
         
-        .order-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .table-badge { background: #2C2C2C; padding: 5px 12px; border-radius: 8px; font-weight: bold; font-size: 1.2rem; }
-        .order-time { color: var(--text-muted); font-size: 0.9rem; }
+        .order-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .table-badge { background: #2C2C2C; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 1.1rem; }
+        .order-time { color: var(--text-muted); font-size: 0.85rem; }
         
-        .order-items { flex-grow: 1; margin-bottom: 20px; }
-        .item-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 1.05rem; padding-bottom: 8px; border-bottom: 1px dashed #2C2C2C; }
-        .item-row:last-child { border-bottom: none; }
-        .item-qty { font-weight: bold; color: var(--primary); margin-right: 10px; }
+        .order-items { flex-grow: 1; margin-bottom: 15px; }
+        .item-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 1rem; padding-bottom: 6px; border-bottom: 1px dashed #2C2C2C; }
+        .item-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .item-qty { font-weight: bold; color: var(--primary); margin-right: 8px; }
         
-        .order-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 15px; border-top: 1px solid var(--border); }
-        .order-total { font-weight: bold; font-size: 1.2rem; }
+        .action-btn { width: 100%; padding: 12px; border-radius: 8px; margin-top: 10px; }
+        .btn-confirm { background: var(--status-pending); color: #000; }
+        .btn-cooking { background: var(--status-cooking); color: #FFF; }
+        .btn-ready { background: var(--status-ready); color: #000; }
         
-        .action-btn { width: auto; padding: 10px 20px; border-radius: 8px; }
-        .btn-confirm { background: var(--status-pending); }
-        .btn-complete { background: var(--status-confirmed); }
-        
-        .empty-state { text-align: center; color: var(--text-muted); padding: 50px; font-size: 1.2rem; grid-column: 1 / -1; }
+        .empty-state { text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 0.95rem; }
     </style>
 </head>
 <body>
 
     <div class="login-container" id="loginScreen">
         <h2>Терминал Персонала</h2>
-        <input type="text" id="username" placeholder="Логин (waiter)">
+        <input type="text" id="username" placeholder="Логин (waiter или chef)">
         <input type="password" id="password" placeholder="Пароль">
         <button onclick="login()">Войти</button>
         <div class="error-msg" id="loginError">Неверный логин или пароль</div>
@@ -72,18 +80,34 @@
 
     <div class="kitchen-container" id="kitchenPanel">
         <div class="header">
-            <h1><span class="pulse"></span>Активные заказы</h1>
-            <button class="logout-btn" onclick="logout()">Смена закрыта</button>
-        </div>
-        <div class="orders-grid" id="ordersGrid">
+            <h1><span class="pulse"></span>Рабочая смена</h1>
+            <div class="user-info">
+                <span class="role-badge" id="roleBadge">Роль</span>
+                <button class="logout-btn" onclick="logout()">Выйти</button>
             </div>
+        </div>
+        
+        <div class="kanban-board">
+            <div class="kanban-col col-pending">
+                <h2>Ждут подтверждения</h2>
+                <div id="list-pending"></div>
+            </div>
+            <div class="kanban-col col-cooking">
+                <h2>На кухне</h2>
+                <div id="list-cooking"></div>
+            </div>
+            <div class="kanban-col col-ready">
+                <h2>Готово (Ждут выдачи)</h2>
+                <div id="list-ready"></div>
+            </div>
+        </div>
     </div>
 
     <script>
         const API_URL = 'https://kali.pythonanywhere.com/api';
         let fetchInterval;
+        let currentUserRole = ''; // Храним роль: 'waiter' или 'chef'
 
-        // Авторизация
         async function login() {
             const user = document.getElementById('username').value;
             const pass = document.getElementById('password').value;
@@ -99,12 +123,17 @@
                 });
                 const data = await res.json();
                 
-                // Пускаем и админа, и официанта/кухню
                 if (res.ok && data.success) {
+                    currentUserRole = data.role; // Запоминаем кто вошел
+                    
                     document.getElementById('loginScreen').style.display = 'none';
                     document.getElementById('kitchenPanel').style.display = 'block';
+                    
+                    // Красивый бейдж роли
+                    const roleText = currentUserRole === 'waiter' ? '👤 Официант' : (currentUserRole === 'chef' ? '👨‍🍳 Повар' : 'Админ');
+                    document.getElementById('roleBadge').innerText = roleText;
+
                     loadOrders();
-                    // Запускаем автообновление каждые 3 секунды
                     fetchInterval = setInterval(loadOrders, 3000);
                 } else {
                     err.innerText = data.message || "Доступ запрещен.";
@@ -115,70 +144,87 @@
 
         function logout() {
             clearInterval(fetchInterval);
+            currentUserRole = '';
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
             document.getElementById('kitchenPanel').style.display = 'none';
             document.getElementById('loginScreen').style.display = 'block';
         }
 
-        // Загрузка заказов
         async function loadOrders() {
             try {
                 const res = await fetch(`${API_URL}/orders`);
                 const orders = await res.json();
                 renderOrders(orders);
-            } catch (e) {
-                console.error("Ошибка загрузки заказов:", e);
-            }
+            } catch (e) { console.error("Ошибка загрузки заказов:", e); }
         }
 
         function renderOrders(orders) {
-            const grid = document.getElementById('ordersGrid');
+            const listPending = document.getElementById('list-pending');
+            const listCooking = document.getElementById('list-cooking');
+            const listReady = document.getElementById('list-ready');
             
-            if (orders.length === 0) {
-                grid.innerHTML = '<div class="empty-state">Заказов пока нет, можно отдохнуть ☕</div>';
-                return;
-            }
+            listPending.innerHTML = '';
+            listCooking.innerHTML = '';
+            listReady.innerHTML = '';
 
-            let html = '';
+            let counts = { pending: 0, cooking: 0, ready: 0 };
+
             orders.forEach(order => {
-                // Извлекаем время из таймстемпа (например, из "2026-05-31 14:22:10" берем "14:22")
                 const timeStr = order.created_at.split(' ')[1].substring(0, 5);
                 
                 let itemsHtml = '';
                 order.items.forEach(item => {
-                    itemsHtml += `
-                        <div class="item-row">
-                            <span><span class="item-qty">${item.qty}x</span> ${item.name}</span>
-                        </div>
-                    `;
+                    itemsHtml += `<div class="item-row"><span><span class="item-qty">${item.qty}x</span> ${item.name}</span></div>`;
                 });
 
-                // Кнопки зависят от статуса
+                // ЛОГИКА РАЗДЕЛЕНИЯ КНОПОК ПО РОЛЯМ
                 let actionBtn = '';
+                
                 if (order.status === 'pending') {
-                    actionBtn = `<button class="action-btn btn-confirm" onclick="updateOrderStatus(${order.id}, 'confirmed')">Подтвердить</button>`;
-                } else if (order.status === 'confirmed') {
-                    actionBtn = `<button class="action-btn btn-complete" onclick="updateOrderStatus(${order.id}, 'completed')">Завершить</button>`;
+                    counts.pending++;
+                    if (currentUserRole === 'waiter' || currentUserRole === 'admin') {
+                        actionBtn = `<button class="action-btn btn-confirm" onclick="updateOrderStatus(${order.id}, 'cooking')">👍 Подтвердить заказ</button>`;
+                    } else {
+                        actionBtn = `<div class="empty-state" style="padding: 10px;">Ждем официанта</div>`;
+                    }
+                } 
+                else if (order.status === 'cooking') {
+                    counts.cooking++;
+                    if (currentUserRole === 'chef' || currentUserRole === 'admin') {
+                        actionBtn = `<button class="action-btn btn-cooking" onclick="updateOrderStatus(${order.id}, 'ready')">✅ Блюда готовы</button>`;
+                    } else {
+                        actionBtn = `<div class="empty-state" style="padding: 10px;">Готовится на кухне...</div>`;
+                    }
+                } 
+                else if (order.status === 'ready') {
+                    counts.ready++;
+                    if (currentUserRole === 'waiter' || currentUserRole === 'admin') {
+                        actionBtn = `<button class="action-btn btn-ready" onclick="updateOrderStatus(${order.id}, 'completed')">🍽️ Отдано гостю</button>`;
+                    } else {
+                        actionBtn = `<div class="empty-state" style="padding: 10px;">Ждем забор официантом</div>`;
+                    }
                 }
 
-                html += `
-                    <div class="order-card ${order.status}">
+                const cardHtml = `
+                    <div class="order-card">
                         <div class="order-header">
                             <div class="table-badge">Стол ${order.table_number}</div>
                             <div class="order-time">#${order.id} • ${timeStr}</div>
                         </div>
-                        <div class="order-items">
-                            ${itemsHtml}
-                        </div>
-                        <div class="order-footer">
-                            <div class="order-total">${order.total_price} ₸</div>
-                            ${actionBtn}
-                        </div>
+                        <div class="order-items">${itemsHtml}</div>
+                        ${actionBtn}
                     </div>
                 `;
+
+                if (order.status === 'pending') listPending.innerHTML += cardHtml;
+                else if (order.status === 'cooking') listCooking.innerHTML += cardHtml;
+                else if (order.status === 'ready') listReady.innerHTML += cardHtml;
             });
-            grid.innerHTML = html;
+
+            if (counts.pending === 0) listPending.innerHTML = '<div class="empty-state">Новых заказов нет</div>';
+            if (counts.cooking === 0) listCooking.innerHTML = '<div class="empty-state">На кухне пусто</div>';
+            if (counts.ready === 0) listReady.innerHTML = '<div class="empty-state">Все выдано</div>';
         }
 
         async function updateOrderStatus(orderId, newStatus) {
@@ -188,12 +234,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: newStatus })
                 });
-                if (res.ok) {
-                    loadOrders(); // Мгновенно обновляем экран
-                }
-            } catch (e) {
-                alert("Ошибка при обновлении статуса.");
-            }
+                if (res.ok) loadOrders(); 
+            } catch (e) { alert("Ошибка при обновлении статуса."); }
         }
     </script>
 </body>
