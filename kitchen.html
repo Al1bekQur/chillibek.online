@@ -127,6 +127,23 @@
 
     <script>
         const API_URL = 'https://kali.pythonanywhere.com/api';
+        function apiFetch(path, options = {}) {
+            const headers = new Headers(options.headers || {});
+            const token = sessionStorage.getItem('staffToken');
+            if (token) headers.set('Authorization', `Bearer ${token}`);
+            return fetch(`${API_URL}${path}`, { ...options, headers }).then(response => {
+                if (response.status === 401 && path !== '/staff/login') {
+                    sessionStorage.removeItem('staffToken');
+                    window.location.reload();
+                }
+                return response;
+            });
+        }
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
         let fetchInterval;
         let timerInterval;
         let currentUserRole = ''; 
@@ -167,6 +184,7 @@
         }
 
         async function login() {
+            sessionStorage.removeItem('staffToken');
             const user = document.getElementById('username').value;
             const pass = document.getElementById('password').value;
             const err = document.getElementById('loginError');
@@ -174,13 +192,14 @@
             if (!user || !pass) { err.innerText = "Заполните все поля!"; err.style.display = 'block'; return; }
 
             try {
-                const res = await fetch(`${API_URL}/staff/login`, {
+                const res = await apiFetch('/staff/login', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username: user, password: pass })
                 });
                 const data = await res.json();
                 
                 if (res.ok && data.success) {
+                    if (data.token) sessionStorage.setItem('staffToken', data.token);
                     currentUserRole = data.role; 
                     document.getElementById('loginScreen').style.display = 'none';
                     document.getElementById('kitchenPanel').style.display = 'block';
@@ -199,6 +218,7 @@
         }
 
         function logout() {
+            sessionStorage.removeItem('staffToken');
             clearInterval(fetchInterval); clearInterval(timerInterval);
             currentUserRole = ''; document.getElementById('username').value = ''; document.getElementById('password').value = '';
             document.getElementById('kitchenPanel').style.display = 'none'; document.getElementById('loginScreen').style.display = 'block';
@@ -206,7 +226,7 @@
 
         async function loadOrders() {
             try {
-                const res = await fetch(`${API_URL}/orders`);
+                const res = await apiFetch('/orders');
                 const orders = await res.json();
                 renderOrders(orders);
                 updateTickers(); 
@@ -223,7 +243,7 @@
 
             orders.forEach(order => {
                 let itemsHtml = '';
-                order.items.forEach(item => { itemsHtml += `<div class="item-row"><span><span class="item-qty">${item.qty}x</span> ${item.name}</span></div>`; });
+                order.items.forEach(item => { itemsHtml += `<div class="item-row"><span><span class="item-qty">${escapeHtml(item.qty)}x</span> ${escapeHtml(item.name)}</span></div>`; });
 
                 const timeStr = formatTime(order.created_at); 
                 
@@ -232,7 +252,7 @@
 
                 if (order.status === 'pending') {
                     counts.pending++;
-                    timersHtml += `<div class="timer-badge timer-active" data-start="${order.created_at}">Ожидание: <span>00:00</span></div>`;
+                    timersHtml += `<div class="timer-badge timer-active" data-start="${escapeHtml(order.created_at)}">Ожидание: <span>00:00</span></div>`;
                     
                     if (currentUserRole === 'waiter' || currentUserRole === 'admin') {
                         // ДВЕ КНОПКИ ДЛЯ ОФИЦИАНТА
@@ -247,7 +267,7 @@
                 else if (order.status === 'cooking') {
                     counts.cooking++;
                     timersHtml += `<div class="timer-badge timer-gray">Одобрен за: <span>${calcDuration(order.created_at, order.approved_at)}</span></div>`;
-                    timersHtml += `<div class="timer-badge timer-active" data-start="${order.approved_at}">Готовка: <span>00:00</span></div>`;
+                    timersHtml += `<div class="timer-badge timer-active" data-start="${escapeHtml(order.approved_at)}">Готовка: <span>00:00</span></div>`;
 
                     if (currentUserRole === 'chef' || currentUserRole === 'admin') {
                         actionBtn = `<button class="action-btn btn-cooking" onclick="updateOrderStatus(${order.id}, 'ready')">✅ Завершить (Готово)</button>`;
@@ -267,8 +287,8 @@
                 const cardHtml = `
                     <div class="order-card">
                         <div class="order-header">
-                            <div class="table-badge">Стол ${order.table_number}</div>
-                            <div class="order-time">#${order.id} • ${timeStr}</div>
+                            <div class="table-badge">Стол ${escapeHtml(order.table_number)}</div>
+                            <div class="order-time">#${escapeHtml(order.id)} • ${escapeHtml(timeStr)}</div>
                         </div>
                         ${timersHtml}
                         <div class="order-items">${itemsHtml}</div>
@@ -298,7 +318,7 @@
 
         async function updateOrderStatus(orderId, newStatus) {
             try {
-                const res = await fetch(`${API_URL}/orders/${orderId}`, {
+                const res = await apiFetch(`/orders/${orderId}`, {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: newStatus })
                 });
@@ -310,7 +330,7 @@
         async function rejectOrder(orderId) {
             if (!confirm("Вы уверены, что хотите отклонить этот заказ? Он исчезнет навсегда.")) return;
             try {
-                const res = await fetch(`${API_URL}/orders/${orderId}`, {
+                const res = await apiFetch(`/orders/${orderId}`, {
                     method: 'DELETE'
                 });
                 if (res.ok) loadOrders(); // Мгновенно обновляем интерфейс
@@ -321,7 +341,7 @@
         async function openArchive() {
             document.getElementById('archiveModal').style.display = 'flex';
             try {
-                const res = await fetch(`${API_URL}/orders/archive`);
+                const res = await apiFetch('/orders/archive');
                 const orders = await res.json();
                 
                 document.getElementById('archiveCount').innerText = orders.length;
@@ -337,18 +357,18 @@
                     const totalTime = calcDuration(o.created_at, o.ready_at);
                     const formattedDate = formatDateTime(o.created_at);
                     
-                    let itemsStr = o.items.map(i => `${i.qty}x ${i.name}`).join(', ');
+                    let itemsStr = o.items.map(i => `${escapeHtml(i.qty)}x ${escapeHtml(i.name)}`).join(', ');
 
                     list.innerHTML += `
                         <div class="archive-item">
                             <div style="flex-grow: 1; margin-right: 15px;">
-                                <div class="table-badge" style="display:inline-block; margin-bottom: 8px;">Стол ${o.table_number}</div>
-                                <div class="archive-meta">${formattedDate}</div>
+                                <div class="table-badge" style="display:inline-block; margin-bottom: 8px;">Стол ${escapeHtml(o.table_number)}</div>
+                                <div class="archive-meta">${escapeHtml(formattedDate)}</div>
                                 <div>${itemsStr}</div>
                             </div>
                             <div style="text-align: right; min-width: 120px;">
-                                <div style="color: var(--primary); font-weight: bold; font-size: 1.1rem; margin-bottom: 5px;">${o.total_price} ₸</div>
-                                <div class="timer-badge timer-gray" style="display:inline-flex;">Итог: <span>${totalTime}</span></div>
+                                <div style="color: var(--primary); font-weight: bold; font-size: 1.1rem; margin-bottom: 5px;">${escapeHtml(o.total_price)} ₸</div>
+                                <div class="timer-badge timer-gray" style="display:inline-flex;">Итог: <span>${escapeHtml(totalTime)}</span></div>
                             </div>
                         </div>
                     `;

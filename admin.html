@@ -120,6 +120,23 @@
 
     <script>
         const API_URL = 'https://kali.pythonanywhere.com/api';
+        function apiFetch(path, options = {}) {
+            const headers = new Headers(options.headers || {});
+            const token = sessionStorage.getItem('staffToken');
+            if (token) headers.set('Authorization', `Bearer ${token}`);
+            return fetch(`${API_URL}${path}`, { ...options, headers }).then(response => {
+                if (response.status === 401 && path !== '/staff/login') {
+                    sessionStorage.removeItem('staffToken');
+                    window.location.reload();
+                }
+                return response;
+            });
+        }
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
         let globalMenuData = [];
 
         const categoryNames = {
@@ -129,6 +146,7 @@
 
         // АВТОРИЗАЦИЯ
         async function login() {
+            sessionStorage.removeItem('staffToken');
             const user = document.getElementById('username').value;
             const pass = document.getElementById('password').value;
             const err = document.getElementById('loginError');
@@ -137,13 +155,14 @@
             if (!user || !pass) { err.innerText = "Заполните все поля!"; err.style.display = 'block'; return; }
 
             try {
-                const res = await fetch(`${API_URL}/staff/login`, {
+                const res = await apiFetch('/staff/login', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username: user, password: pass })
                 });
                 const data = await res.json();
                 
                 if (res.ok && data.success && data.role === 'admin') {
+                    if (data.token) sessionStorage.setItem('staffToken', data.token);
                     document.getElementById('loginScreen').style.display = 'none';
                     document.getElementById('adminPanel').style.display = 'block';
                     loadAdminMenu();
@@ -155,6 +174,7 @@
         }
 
         function logout() {
+            sessionStorage.removeItem('staffToken');
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
             document.getElementById('adminPanel').style.display = 'none';
@@ -164,7 +184,7 @@
         // ЗАГРУЗКА МЕНЮ
         async function loadAdminMenu() {
             try {
-                const res = await fetch(`${API_URL}/menu`);
+                const res = await apiFetch('/menu');
                 globalMenuData = await res.json();
                 renderCategorizedMenu();
             } catch (e) { console.error("Ошибка загрузки:", e); }
@@ -186,12 +206,12 @@
                         catHtml += `
                             <div class="menu-row">
                                 <div class="item-details">
-                                    <h4>${item.name}</h4>
-                                    <p>${item.price} ₸ • ${item.weight}</p>
+                                    <h4>${escapeHtml(item.name)}</h4>
+                                    <p>${escapeHtml(item.price)} ₸ • ${escapeHtml(item.weight)}</p>
                                 </div>
                                 <div class="row-controls">
                                     <button class="edit-btn" onclick="openEditModal(${item.id})">Редактировать</button>
-                                    <button class="delete-btn" onclick="deleteItem(${item.id}, '${item.name}')">Удалить</button>
+                                    <button class="delete-btn" onclick="deleteItem(${item.id})">Удалить</button>
                                 </div>
                             </div>
                         `;
@@ -222,7 +242,7 @@
             err.style.display = 'none';
 
             try {
-                const res = await fetch(`${API_URL}/menu/add`, {
+                const res = await apiFetch('/menu/add', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
@@ -239,12 +259,14 @@
         }
 
         // 2. УДАЛЕНИЕ
-        async function deleteItem(id, name) {
+        async function deleteItem(id) {
+            const item = globalMenuData.find(menuItem => menuItem.id === id);
+            if (!item) return;
             // Запрашиваем подтверждение, чтобы случайно не кликнуть
-            if (!confirm(`Вы точно хотите удалить "${name}" из меню?`)) return;
+            if (!confirm(`Вы точно хотите удалить "${item.name}" из меню?`)) return;
 
             try {
-                const res = await fetch(`${API_URL}/menu/delete/${id}`, { method: 'DELETE' });
+                const res = await apiFetch(`/menu/delete/${id}`, { method: 'DELETE' });
                 if (res.ok) loadAdminMenu();
             } catch (e) { alert("Ошибка при удалении."); }
         }
@@ -262,7 +284,7 @@
             };
 
             try {
-                const res = await fetch(`${API_URL}/menu/edit/${id}`, {
+                const res = await apiFetch(`/menu/edit/${id}`, {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
@@ -283,7 +305,7 @@
             if (matches.length > 0) {
                 resultsBox.innerHTML = matches.map(item => `
                     <div class="search-result-item" onclick="openEditFromSearch(${item.id})">
-                        <span><strong>${item.name}</strong></span>
+                        <span><strong>${escapeHtml(item.name)}</strong></span>
                         <span style="color: var(--text-muted); font-size: 0.85rem;">${item.price} ₸</span>
                     </div>
                 `).join('');

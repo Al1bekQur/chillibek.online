@@ -157,6 +157,11 @@
 
     <script>
         const API_URL = 'https://kali.pythonanywhere.com/api';
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
         const categories = ['breakfasts', 'salads', 'soups', 'main', 'pizza', 'snacks', 'drinks'];
         let menuData = []; 
         let cart = {}; 
@@ -184,15 +189,15 @@
 
                 const itemHtml = `
                     <div class="menu-item">
-                        <img class="item-img" src="${item.image_url}" loading="lazy" onclick="openDetails(${item.id})">
+                        <img class="item-img" src="${escapeHtml(item.image_url)}" loading="lazy" onclick="openDetails(${item.id})">
                         <div class="item-info">
                             <div class="item-header">
-                                <h3 class="item-name" onclick="openDetails(${item.id})">${item.name}</h3>
-                                <span class="item-weight">${item.weight}</span>
+                                <h3 class="item-name" onclick="openDetails(${item.id})">${escapeHtml(item.name)}</h3>
+                                <span class="item-weight">${escapeHtml(item.weight)}</span>
                             </div>
-                            <p class="item-desc" onclick="openDetails(${item.id})">${item.description}</p>
+                            <p class="item-desc" onclick="openDetails(${item.id})">${escapeHtml(item.description)}</p>
                             <div class="price-row">
-                                <div class="item-price">${item.price} ₸</div>
+                                <div class="item-price">${escapeHtml(item.price)} ₸</div>
                                 <div id="btn-container-${item.id}">${btnHtml}</div>
                             </div>
                         </div>
@@ -222,8 +227,8 @@
                 cartList.innerHTML += `
                     <div class="cart-item">
                         <div>
-                            <div class="cart-item-name">${item.name}</div>
-                            <div class="cart-item-price">${item.price} ₸</div>
+                            <div class="cart-item-name">${escapeHtml(item.name)}</div>
+                            <div class="cart-item-price">${escapeHtml(item.price)} ₸</div>
                         </div>
                         <div class="qty-control">
                             <button class="qty-btn" onclick="updateCart(${item.id}, -1)">−</button>
