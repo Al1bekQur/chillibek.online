@@ -23,6 +23,8 @@ env/
 *.sqlite
 *.sqlite3
 backend/instance/
+waf/logs/
+waf/local/
 
 # Editor and operating-system files
 .vscode/
