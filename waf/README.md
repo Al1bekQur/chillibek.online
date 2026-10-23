@@ -1,5 +1,10 @@
 # Chillibek WAF Phase 1
 
+For the no-new-provider PythonAnywhere Free option, see
+[`PYTHONANYWHERE_WAF.md`](../PYTHONANYWHERE_WAF.md). `waf.wsgi.protect_wsgi` adapts
+this same WAF around an existing Flask callable inside one managed WSGI app.
+It is prepared and tested locally; production installation requires separate approval.
+
 The live Security Settings panel extends this original proxy. See
 [`SETTINGS_DEPLOYMENT.md`](../SETTINGS_DEPLOYMENT.md) for current controls, API,
 persistence, local startup, tests and public routing requirements. On local HTTP,

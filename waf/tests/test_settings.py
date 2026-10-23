@@ -282,15 +282,16 @@ async def test_login_throttle_not_disabled_by_policy(control):
 
 
 @pytest.mark.anyio
-async def test_corrupt_policy_fails_closed_without_restoring_defaults(control):
+@pytest.mark.parametrize('stored', ['invalid-json', '{}', '{"mode":"monitor"}'])
+async def test_corrupt_policy_fails_closed_without_restoring_defaults(control, stored):
     client, _, settings, captured = control
     with sqlite3.connect(settings.policy_path) as connection:
-        connection.execute("UPDATE policy SET value='invalid-json' WHERE id=1")
+        connection.execute("UPDATE policy SET value=? WHERE id=1", (stored,))
     assert (await client.get('/waf-api/settings')).status_code == 503
     assert (await client.get('/api/menu')).status_code == 503
     assert not captured
     with sqlite3.connect(settings.policy_path) as connection:
-        assert connection.execute('SELECT value FROM policy').fetchone()[0] == 'invalid-json'
+        assert connection.execute('SELECT value FROM policy').fetchone()[0] == stored
 
 
 @pytest.mark.anyio

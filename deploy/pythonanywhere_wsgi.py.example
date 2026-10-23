@@ -1,0 +1,38 @@
+"""Review and install in PythonAnywhere's WSGI file only AFTER separate approval.
+
+Use a backed-up staging copy first. Existing Flask module/database locations must
+be verified on the account; this example does not guess or migrate them.
+"""
+import os
+import sys
+from dataclasses import replace
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+project_root = Path("/home/kali/chillibek.online")  # Replace with the VERIFIED checkout.
+sys.path.insert(0, str(project_root))
+load_dotenv("/home/kali/.config/chillibek-waf.env", override=False)
+
+# The secured backend can otherwise create a fresh default database. Require an
+# explicit verified database location for this cutover example before importing it.
+if not os.getenv("DATABASE_URL"):
+    configured_database = os.getenv("DATABASE_PATH")
+    if not configured_database or not Path(configured_database).is_absolute() or not Path(configured_database).is_file():
+        raise RuntimeError("Set DATABASE_URL or a verified existing absolute DATABASE_PATH before cutover.")
+
+# Keep the account's EXISTING Flask import here if adding inspection only.
+# Use this secured backend import only after the database and staff frontend
+# compatibility cutover in PYTHONANYWHERE_WAF.md has been approved and staged.
+from backend.server import app as restaurant
+from waf.config import WAFSettings
+from waf.wsgi import protect_wsgi
+
+# Explicit paths avoid accidentally resetting policy when a checkout is replaced.
+# Do NOT create a new empty policy if there is already an approved policy database.
+runtime = Path("/home/kali/.local/share/chillibek-waf")
+settings = replace(WAFSettings(), policy_path=runtime / "policy.sqlite3",
+                   log_path=runtime / "events.log", dashboard_secure_cookies=True)
+application = protect_wsgi(restaurant, settings, trust_pythonanywhere_proxy=True)
+
+# Never export the raw `restaurant` as `application`; never call app.run()/uvicorn here.

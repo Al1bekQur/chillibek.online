@@ -90,7 +90,10 @@ class PolicyStore:
         row = connection.execute("SELECT * FROM policy WHERE id=1").fetchone()
         # Never silently enable defaults when durable configuration is corrupted.
         try:
-            policy = Policy.model_validate_json(row["value"]).model_dump()
+            stored = json.loads(row["value"])
+            if not isinstance(stored, dict) or set(stored) != set(Policy.model_fields):
+                raise ValueError("Stored policy is incomplete.")
+            policy = Policy.model_validate(stored).model_dump()
         except ValueError:
             raise sqlite3.DatabaseError("Stored WAF policy is invalid.") from None
         return {

@@ -1,5 +1,11 @@
 # CHILLIBEK WAF settings — implementation and deployment
 
+The earlier standalone-proxy/edge deployment options below remain available.
+For the user's current PythonAnywhere Free plan, see the newer
+[`PYTHONANYWHERE_WAF.md`](PYTHONANYWHERE_WAF.md): a single protected WSGI entry
+point and top-level management navigation avoid an extra provider or DNS cutover.
+Those new changes are local preparation and have not been published.
+
 ## Current status
 
 The `dev` branch contains the WAF/settings implementation and deployment preparation.

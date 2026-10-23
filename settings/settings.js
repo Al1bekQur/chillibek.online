@@ -1,5 +1,12 @@
 'use strict';
 (() => {
+  // Pages cannot host the API. Keep operator sessions on the WSGI host using
+  // top-level navigation, with no cross-site cookies, CORS credentials or tokens.
+  // Publish this route only AFTER the protected PythonAnywhere app is verified.
+  if (['https://chillibek.online', 'https://www.chillibek.online'].includes(window.location.origin)) {
+    window.location.replace('https://kali.pythonanywhere.com/settings/');
+    return;
+  }
   const modules = [
     ['sql_injection', 'SQL Injection Protection', 'Inspect requests for SQL keywords, boolean injection, and comment operators.'],
     ['xss', 'XSS Protection', 'Detect script tags, event handlers, and JavaScript URLs.'],

@@ -148,12 +148,18 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
 
         response_headers = _response_headers(upstream_response.headers)
         _write_log(settings, request, "allowed", matched_rules, risk_score, upstream_response.status_code, policy)
-        return Response(
+        response = Response(
             content=upstream_response.content,
             status_code=upstream_response.status_code,
             headers=response_headers,
             media_type=upstream_response.headers.get("content-type"),
         )
+        if settings.forward_upstream_cookies:
+            # The in-process WSGI adapter must preserve existing Flask sessions,
+            # including multiple Set-Cookie headers. Cookie values are never logged.
+            for cookie in upstream_response.headers.get_list("set-cookie"):
+                response.headers.append("set-cookie", cookie)
+        return response
 
     return app
 

@@ -14,6 +14,7 @@ class WAFSettings:
     block_threshold: int = 5
     log_path: Path = Path(__file__).resolve().parent / "logs" / "waf.log"
     upstream_transport: Any | None = None
+    forward_upstream_cookies: bool = False
     dashboard_username: str | None = os.getenv("WAF_DASHBOARD_USERNAME")
     dashboard_password_hash: str | None = os.getenv("WAF_DASHBOARD_PASSWORD_HASH")
     dashboard_session_secret: str | None = os.getenv("WAF_DASHBOARD_SESSION_SECRET")
