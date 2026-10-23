@@ -17,6 +17,17 @@ from werkzeug.security import check_password_hash
 
 from .config import WAFSettings
 from .rules import RULES
+from .policy import Policy
+
+
+EXTRA_RULES = [
+    {"rule_id": "RATE-001", "category": "rate_limiting", "score": 5,
+     "description": "Per-client fixed-window request limit."},
+    {"rule_id": "HEADER-001", "category": "suspicious_headers", "score": 5,
+     "description": "Ambiguous framing, method overrides and header control bytes."},
+    {"rule_id": "SIZE-001", "category": "request_size", "score": 10,
+     "description": "Streaming request body size limit."},
+]
 
 
 SESSION_COOKIE = "chillibek_waf_session"
@@ -29,15 +40,15 @@ def dashboard_router(settings: WAFSettings) -> APIRouter:
     @router.get("/dashboard/login", response_class=HTMLResponse)
     async def login_page(request: Request) -> HTMLResponse:
         if _is_authenticated(request, settings):
-            return RedirectResponse("/dashboard", status_code=303)
+            return RedirectResponse("/settings" if request.query_params.get("next") == "/settings" else "/dashboard", status_code=303)
         token = secrets.token_urlsafe(32)
-        response = HTMLResponse(_login_html(_auth_configured(settings), token))
+        response = HTMLResponse(_login_html(_auth_configured(settings), token, request.query_params.get("next") == "/settings"))
         response.set_cookie(
             CSRF_COOKIE,
             token,
             httponly=True,
             samesite="strict",
-            secure=False,
+            secure=settings.dashboard_secure_cookies,
             max_age=600,
         )
         return response
@@ -63,13 +74,14 @@ def dashboard_router(settings: WAFSettings) -> APIRouter:
             raise HTTPException(status_code=401, detail="Invalid username or password.")
 
         serializer = _serializer(settings)
-        response = RedirectResponse("/dashboard", status_code=303)
+        destination = "/settings" if form.get("next", [""])[0] == "/settings" else "/dashboard"
+        response = RedirectResponse(destination, status_code=303)
         response.set_cookie(
             SESSION_COOKIE,
-            serializer.dumps({"username": username}),
+            serializer.dumps({"username": username, "session_id": secrets.token_urlsafe(24)}),
             httponly=True,
             samesite="strict",
-            secure=False,
+            secure=settings.dashboard_secure_cookies,
             max_age=settings.dashboard_session_max_age,
         )
         response.delete_cookie(CSRF_COOKIE)
@@ -121,6 +133,7 @@ def dashboard_router(settings: WAFSettings) -> APIRouter:
     @router.get("/dashboard/api/rules")
     async def api_rules(request: Request) -> dict[str, Any]:
         require_dashboard_auth(request, settings)
+        policy = Policy.model_validate(request.app.state.policy_store.read()["policy"])
         return {
             "rules": [
                 {
@@ -128,10 +141,12 @@ def dashboard_router(settings: WAFSettings) -> APIRouter:
                     "category": rule.category,
                     "score": rule.score,
                     "description": rule.description,
+                    "enabled": getattr(policy, rule.category),
                 }
                 for rule in RULES
-            ],
+            ] + [{**rule, "enabled": getattr(policy, rule["category"])} for rule in EXTRA_RULES],
             "block_threshold": settings.block_threshold,
+            "mode": policy.mode,
         }
 
     return router
@@ -265,6 +280,7 @@ def _summary(events: list[dict[str, Any]]) -> dict[str, Any]:
     rule_counts = Counter()
     activity = Counter()
     rule_category = {rule.rule_id: rule.category for rule in RULES}
+    rule_category.update({rule["rule_id"]: rule["category"] for rule in EXTRA_RULES})
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(hours=23)
 
@@ -297,7 +313,7 @@ def _activity_series(activity: Counter, now: datetime) -> list[dict[str, Any]]:
     return series
 
 
-def _login_html(configured: bool, csrf_token: str) -> str:
+def _login_html(configured: bool, csrf_token: str, settings_next: bool = False) -> str:
     notice = ""
     if not configured:
         notice = "<p class=\"notice\">Dashboard auth is not configured. Set WAF_DASHBOARD_USERNAME, WAF_DASHBOARD_PASSWORD_HASH and WAF_DASHBOARD_SESSION_SECRET.</p>"
@@ -316,6 +332,7 @@ def _login_html(configured: bool, csrf_token: str) -> str:
     {notice}
     <form method="post" action="/dashboard/login">
       <input type="hidden" name="csrf_token" value="{escape(csrf_token)}">
+      <input type="hidden" name="next" value="{'/settings' if settings_next else '/dashboard'}">
       <label>Username<input name="username" autocomplete="username" required></label>
       <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
       <button type="submit">Sign in</button>
@@ -340,6 +357,7 @@ def _dashboard_html() -> str:
       <div class="brand">CHILLIBEK WAF</div>
       <h1>Security Dashboard</h1>
     </div>
+    <a href="/settings">Security Settings</a>
     <form method="post" action="/dashboard/logout"><button class="ghost" type="submit">Logout</button></form>
   </header>
   <main>
@@ -368,7 +386,7 @@ def _dashboard_html() -> str:
     </section>
     <section class="grid">
       <article class="panel wide"><h2>Recent Security Events</h2><div class="table-wrap"><table><thead><tr><th>Time</th><th>Decision</th><th>Method</th><th>Path</th><th>Status</th><th>Risk</th><th>Rules</th></tr></thead><tbody id="eventsBody"></tbody></table></div><div class="pager"><button id="prevPage">Prev</button><span id="pageInfo"></span><button id="nextPage">Next</button></div></article>
-      <article class="panel"><h2>Active Rules</h2><div id="rulesList" class="rules"></div></article>
+      <article class="panel"><h2>Detection Rules</h2><div id="rulesList" class="rules"></div></article>
     </section>
   </main>
   <script>{_javascript()}</script>
@@ -451,7 +469,7 @@ async function loadDashboard() {
   document.getElementById('nextPage').disabled = offset + limit >= events.total;
 
   const rules = await fetch('/dashboard/api/rules').then(r => r.json());
-  renderRules(rules.rules || [], rules.block_threshold);
+  renderRules(rules.rules || [], rules.block_threshold, rules.mode);
 }
 function renderCategories(categories) {
   const box = document.getElementById('categoryList');
@@ -481,18 +499,18 @@ function renderEvents(events) {
     body.appendChild(tr);
   }
 }
-function renderRules(rules, threshold) {
+function renderRules(rules, threshold, mode) {
   const box = document.getElementById('rulesList');
   box.replaceChildren();
   const intro = document.createElement('div');
   intro.className = 'metric';
-  intro.textContent = 'Block threshold: ' + threshold;
+  intro.textContent = 'Mode: ' + mode + ' | Block threshold: ' + threshold;
   box.appendChild(intro);
   for (const rule of rules) {
     const item = document.createElement('div');
     item.className = 'rule';
     const title = document.createElement('b');
-    title.textContent = `${rule.rule_id} (${rule.category}, score ${rule.score})`;
+    title.textContent = `${rule.rule_id} | ${rule.enabled ? 'ON' : 'OFF'} (${rule.category}, score ${rule.score})`;
     const desc = document.createElement('div');
     desc.textContent = rule.description;
     item.append(title, desc);

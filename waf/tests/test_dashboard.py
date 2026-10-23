@@ -49,6 +49,7 @@ async def dashboard_client(tmp_path):
         dashboard_password_hash=generate_password_hash("synthetic-dashboard-password"),
         dashboard_session_secret="synthetic-dashboard-session-secret-32chars",
         dashboard_log_read_limit=10,
+        dashboard_secure_cookies=False,
     )
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)

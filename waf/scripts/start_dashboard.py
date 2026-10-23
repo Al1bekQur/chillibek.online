@@ -16,6 +16,8 @@ def main():
     os.environ["WAF_DASHBOARD_USERNAME"] = username
     os.environ["WAF_DASHBOARD_PASSWORD_HASH"] = generate_password_hash(password)
     os.environ["WAF_DASHBOARD_SESSION_SECRET"] = secrets.token_urlsafe(48)
+    # This helper listens only on HTTP loopback. Public HTTPS startup keeps Secure cookies.
+    os.environ.setdefault("WAF_SECURE_COOKIES", "false")
 
     password = ""
     confirmation = ""

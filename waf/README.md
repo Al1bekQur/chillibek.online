@@ -1,5 +1,11 @@
 # Chillibek WAF Phase 1
 
+The live Security Settings panel extends this original proxy. See
+[`SETTINGS_DEPLOYMENT.md`](../SETTINGS_DEPLOYMENT.md) for current controls, API,
+persistence, local startup, tests and public routing requirements. On local HTTP,
+set `WAF_SECURE_COOKIES=false` before starting the Dashboard; public HTTPS defaults
+to Secure cookies. This does not deploy `/settings` to the public domain.
+
 This directory contains the first working Web Application Firewall prototype for the Chillibek diploma project. It is an independent Python reverse proxy built with FastAPI, httpx, and Uvicorn.
 
 ## Architecture

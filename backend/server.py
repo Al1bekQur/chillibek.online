@@ -18,6 +18,24 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
+from sqlalchemy.exc import IntegrityError
+
+try:
+    from .db import (
+        create_db_engine,
+        create_schema,
+        database_url_from_path,
+        seed_menu_if_empty,
+        connection_scope,
+    )
+except ImportError:  # Supports `flask --app backend/server.py` and legacy test imports.
+    from db import (
+        create_db_engine,
+        create_schema,
+        database_url_from_path,
+        seed_menu_if_empty,
+        connection_scope,
+    )
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -47,61 +65,13 @@ MENU_SEED = [
 
 @contextmanager
 def get_db_connection():
-    database_path = Path(current_app.config["DATABASE_PATH"])
-    database_path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(database_path, timeout=10)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    try:
+    with connection_scope(current_app.config["DB_ENGINE"]) as connection:
         yield connection
-        connection.commit()
-    except Exception:
-        connection.rollback()
-        raise
-    finally:
-        connection.close()
 
 
 def init_db():
-    with get_db_connection() as connection:
-        connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS menu_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category TEXT NOT NULL,
-                name TEXT NOT NULL,
-                description TEXT,
-                weight TEXT,
-                price INTEGER NOT NULL,
-                image_url TEXT
-            );
-            CREATE TABLE IF NOT EXISTS staff (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL,
-                role TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS orders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                table_number TEXT,
-                items_json TEXT NOT NULL,
-                total_price INTEGER NOT NULL,
-                status TEXT DEFAULT 'pending',
-                created_at TEXT,
-                approved_at TEXT,
-                ready_at TEXT
-            );
-            """
-        )
-        if connection.execute("SELECT COUNT(*) FROM menu_items").fetchone()[0] == 0:
-            connection.executemany(
-                """
-                INSERT INTO menu_items
-                    (category, name, description, weight, price, image_url)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                MENU_SEED,
-            )
+    create_schema(current_app.config["DB_ENGINE"])
+    seed_menu_if_empty(current_app.config["DB_ENGINE"], MENU_SEED)
 
 
 def _token_serializer():
@@ -202,13 +172,13 @@ def require_roles(*allowed_roles):
 def create_app(test_config=None):
     load_dotenv(BASE_DIR / ".env")
     secret_key = os.getenv("FLASK_SECRET_KEY")
+    database_url = os.getenv("DATABASE_URL")
     database_path = os.getenv("DATABASE_PATH", "instance/chillibek.sqlite3")
-    if not Path(database_path).is_absolute():
-        database_path = str(BASE_DIR / database_path)
 
     app = Flask(__name__)
     app.config.from_mapping(
         SECRET_KEY=secret_key,
+        DATABASE_URL=database_url,
         DATABASE_PATH=database_path,
         TOKEN_MAX_AGE=8 * 60 * 60,
         MAX_CONTENT_LENGTH=1 * 1024 * 1024,
@@ -217,6 +187,13 @@ def create_app(test_config=None):
     )
     if test_config:
         app.config.update(test_config)
+    if not app.config["DATABASE_URL"]:
+        configured_path = app.config["DATABASE_PATH"]
+        if not Path(configured_path).is_absolute():
+            configured_path = str(BASE_DIR / configured_path)
+        app.config["DATABASE_PATH"] = configured_path
+        app.config["DATABASE_URL"] = database_url_from_path(configured_path)
+    app.config["DB_ENGINE"] = create_db_engine(app.config["DATABASE_URL"])
     if not app.config["SECRET_KEY"] or len(app.config["SECRET_KEY"]) < 32:
         raise RuntimeError("Set FLASK_SECRET_KEY to a random value of at least 32 characters.")
 
@@ -526,7 +503,7 @@ def create_app(test_config=None):
                     "INSERT INTO staff (username, password, role) VALUES (?, ?, 'admin')",
                     (username, generate_password_hash(password)),
                 )
-            except sqlite3.IntegrityError as error:
+            except IntegrityError as error:
                 raise click.ClickException("That username already exists.") from error
         click.echo("Admin account created.")
 
@@ -547,7 +524,7 @@ def create_app(test_config=None):
                     "INSERT INTO staff (username, password, role) VALUES (?, ?, ?)",
                     (username, generate_password_hash(password), role),
                 )
-            except sqlite3.IntegrityError as error:
+            except IntegrityError as error:
                 raise click.ClickException("That username already exists.") from error
         click.echo("Staff account created.")
 
