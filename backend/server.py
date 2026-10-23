@@ -1,4 +1,5 @@
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -19,6 +20,11 @@ from flask_limiter.util import get_remote_address
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
+
+try:
+    from . import login_guard
+except ImportError:
+    import login_guard
 
 try:
     from .db import (
@@ -122,8 +128,18 @@ def _menu_payload(data):
         parsed_url = urlsplit(image_url)
     except ValueError:
         abort(400, description="image_url must be a valid HTTP or HTTPS URL.")
-    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+    if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname or parsed_url.username or parsed_url.password or '\\' in image_url:
         abort(400, description="image_url must be an HTTP or HTTPS URL.")
+    # The application stores this URL for browser images; it NEVER fetches it.
+    # Reject literal local destinations/credentials, without adding a DNS fetch.
+    if parsed_url.hostname.lower() in {'localhost', 'metadata.google.internal'} or parsed_url.hostname.lower().endswith(('.localhost', '.local', '.internal')):
+        abort(400, description='Local image destinations are not allowed.')
+    try:
+        address = ipaddress.ip_address(parsed_url.hostname)
+    except ValueError:
+        address = None
+    if address is not None and not address.is_global:
+        abort(400, description='Local image destinations are not allowed.')
 
     return (
         category,
@@ -220,6 +236,9 @@ def create_app(test_config=None):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Cache-Control"] = "no-store"
+        response.headers['Content-Security-Policy'] = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+        if request.is_secure:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000'
         return response
 
     @app.errorhandler(400)
@@ -227,6 +246,7 @@ def create_app(test_config=None):
     @app.errorhandler(403)
     @app.errorhandler(404)
     @app.errorhandler(405)
+    @app.errorhandler(409)
     @app.errorhandler(413)
     @app.errorhandler(415)
     @app.errorhandler(429)
@@ -254,6 +274,11 @@ def create_app(test_config=None):
         password = data.get("password")
         if not isinstance(password, str) or not password or len(password) > 256:
             abort(400, description="A valid password is required.")
+        identities = login_guard.keys(request.remote_addr or 'unknown', username)
+        retry = login_guard.admit(app.config['DB_ENGINE'], identities)
+        if retry:
+            app.logger.warning('security_event=LOGIN_LIMIT rule_id=AUTH-001')
+            return jsonify({'success': False, 'message': 'Too many login attempts.'}), 429, {'Retry-After': str(retry)}
 
         with get_db_connection() as connection:
             user = connection.execute(
@@ -261,6 +286,7 @@ def create_app(test_config=None):
                 (username,),
             ).fetchone()
             if user is None or user["role"] not in ROLES:
+                app.logger.warning('security_event=LOGIN_FAILURE rule_id=AUTH-FAIL-001')
                 abort(401, description="Invalid username or password.")
 
             stored_password = user["password"]
@@ -279,8 +305,10 @@ def create_app(test_config=None):
                         (generate_password_hash(password), user["id"]),
                     )
             if not password_valid:
+                app.logger.warning('security_event=LOGIN_FAILURE rule_id=AUTH-FAIL-001')
                 abort(401, description="Invalid username or password.")
 
+        login_guard.success(app.config['DB_ENGINE'], identities)
         token = _token_serializer().dumps({"staff_id": user["id"]})
         return jsonify({"success": True, "role": user["role"], "token": token})
 
@@ -457,19 +485,21 @@ def create_app(test_config=None):
                 abort(403, description="This role cannot perform that order transition.")
 
             if status == "cooking":
-                connection.execute(
-                    "UPDATE orders SET status = ?, approved_at = ? WHERE id = ?",
-                    (status, now, order_id),
+                cursor = connection.execute(
+                    "UPDATE orders SET status = ?, approved_at = ? WHERE id = ? AND status = ?",
+                    (status, now, order_id, old_status),
                 )
             elif status == "ready":
-                connection.execute(
-                    "UPDATE orders SET status = ?, ready_at = ? WHERE id = ?",
-                    (status, now, order_id),
+                cursor = connection.execute(
+                    "UPDATE orders SET status = ?, ready_at = ? WHERE id = ? AND status = ?",
+                    (status, now, order_id, old_status),
                 )
             else:
-                connection.execute(
-                    "UPDATE orders SET status = ? WHERE id = ?", (status, order_id)
+                cursor = connection.execute(
+                    "UPDATE orders SET status = ? WHERE id = ? AND status = ?", (status, order_id, old_status)
                 )
+            if cursor.rowcount != 1:
+                abort(409, description='Order changed; refresh and retry.')
         return jsonify({"success": True})
 
     @app.delete("/api/orders/<int:order_id>")
@@ -484,7 +514,9 @@ def create_app(test_config=None):
                 abort(404, description="Order not found.")
             if g.staff["role"] == "waiter" and order["status"] != "pending":
                 abort(403, description="Waiters may only reject pending orders.")
-            connection.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+            cursor = connection.execute("DELETE FROM orders WHERE id = ? AND status = ?", (order_id, order['status']))
+            if cursor.rowcount != 1:
+                abort(409, description='Order changed; refresh and retry.')
         return jsonify({"success": True})
 
     @app.cli.command("create-admin")

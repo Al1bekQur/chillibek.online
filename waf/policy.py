@@ -1,7 +1,9 @@
-"""Durable live policy, mandatory audit trail and shared fixed-window counters."""
+"""Durable live policy, audit trail, sliding counters and cross-worker admission."""
+import hashlib
 import json
 import sqlite3
 import time
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +22,9 @@ class Policy(BaseModel):
     suspicious_headers: StrictBool = True
     request_size: StrictBool = True
     event_logging: StrictBool = True
+    command_injection: StrictBool = True
+    brute_force: StrictBool = True
+    bot_detection: StrictBool = True
 
 
 class PolicyUpdate(BaseModel):
@@ -51,6 +56,8 @@ def now():
 class PolicyStore:
     def __init__(self, path: Path):
         self.path = path
+        self._schema_lock = threading.Lock()
+        self._initialized = False
 
     @contextmanager
     def connect(self):
@@ -59,25 +66,10 @@ class PolicyStore:
         connection.row_factory = sqlite3.Row
         try:
             connection.execute("PRAGMA synchronous=FULL")
-            connection.executescript("""
-                CREATE TABLE IF NOT EXISTS policy (
-                    id INTEGER PRIMARY KEY CHECK(id=1), value TEXT NOT NULL,
-                    revision INTEGER NOT NULL, updated_at TEXT, updated_by TEXT
-                );
-                CREATE TABLE IF NOT EXISTS configuration_audit (
-                    id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL,
-                    actor TEXT, action TEXT NOT NULL, details TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS rate_windows (
-                    scope TEXT NOT NULL, client TEXT NOT NULL, bucket INTEGER NOT NULL,
-                    count INTEGER NOT NULL, PRIMARY KEY(scope, client)
-                );
-            """)
-            connection.execute(
-                "INSERT OR IGNORE INTO policy VALUES (1, ?, 0, NULL, NULL)",
-                (Policy().model_dump_json(),),
-            )
-            connection.commit()
+            with self._schema_lock:
+                if not self._initialized:
+                    self._initialize(connection)
+                    self._initialized = True
             yield connection
             connection.commit()
         except Exception:
@@ -86,8 +78,61 @@ class PolicyStore:
         finally:
             connection.close()
 
+    def _initialize(self, connection):
+        existed = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='policy'").fetchone() is not None
+        connection.executescript("""
+            CREATE TABLE IF NOT EXISTS policy (
+                id INTEGER PRIMARY KEY CHECK(id=1), value TEXT NOT NULL,
+                revision INTEGER NOT NULL, updated_at TEXT, updated_by TEXT
+            );
+            CREATE TABLE IF NOT EXISTS configuration_audit (
+                id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL,
+                actor TEXT, action TEXT NOT NULL, details TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS rate_windows (
+                scope TEXT NOT NULL, client TEXT NOT NULL, bucket INTEGER NOT NULL,
+                count INTEGER NOT NULL, PRIMARY KEY(scope, client)
+            );
+            CREATE TABLE IF NOT EXISTS traffic_events (
+                scope TEXT NOT NULL, client TEXT NOT NULL, timestamp REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS traffic_lookup ON traffic_events(scope, client, timestamp);
+            CREATE TABLE IF NOT EXISTS leases (
+                token TEXT PRIMARY KEY, client TEXT NOT NULL, expires REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS failures (
+                client TEXT PRIMARY KEY, count INTEGER NOT NULL, level INTEGER NOT NULL,
+                expires REAL NOT NULL, locked_until REAL NOT NULL
+            );
+        """)
+        if not existed:
+            connection.execute('INSERT OR IGNORE INTO policy VALUES (1, ?, 0, NULL, NULL)', (Policy().model_dump_json(),))
+        connection.commit()
+        # Upgrade only the complete, validated previous schema. Partial or
+        # corrupted policies must never be interpreted as an old version.
+        row = connection.execute('SELECT value FROM policy WHERE id=1').fetchone()
+        if row is None:
+            raise sqlite3.DatabaseError('Stored WAF policy is missing.')
+        raw = row[0]
+        try:
+            legacy = json.loads(raw)
+            old_keys = set(Policy.model_fields) - {'command_injection', 'brute_force', 'bot_detection'}
+            if isinstance(legacy, dict) and set(legacy) == old_keys:
+                upgraded = Policy.model_validate(legacy)
+                connection.execute('BEGIN IMMEDIATE')
+                # Another worker may already have upgraded the row.
+                changed = connection.execute('UPDATE policy SET value=?, revision=revision+1, updated_at=?, updated_by=? WHERE id=1 AND value=?',
+                    (upgraded.model_dump_json(), now(), 'schema-migration', raw)).rowcount
+                if changed:
+                    self._audit(connection, 'schema-migration', 'schema_upgrade', {'added': ['command_injection', 'brute_force', 'bot_detection']})
+                connection.commit()
+        except ValueError:
+            pass  # _snapshot rejects invalid storage without modifying it.
+
     def _snapshot(self, connection):
         row = connection.execute("SELECT * FROM policy WHERE id=1").fetchone()
+        if row is None:
+            raise sqlite3.DatabaseError('Stored WAF policy is missing.')
         # Never silently enable defaults when durable configuration is corrupted.
         try:
             stored = json.loads(row["value"])
@@ -131,19 +176,67 @@ class PolicyStore:
             self._audit(connection, actor, action, details)
 
     def over_limit(self, scope, client, limit, window):
-        current = int(time.time())
-        bucket = current // window
+        current = time.time()
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            # Bounded retention; counters are shared by processes on this server.
-            connection.execute("DELETE FROM rate_windows WHERE scope=? AND bucket < ?", (scope, bucket))
-            connection.execute("""
-                INSERT INTO rate_windows VALUES (?, ?, ?, 1)
-                ON CONFLICT(scope, client) DO UPDATE SET
-                    count=CASE WHEN bucket=excluded.bucket THEN count+1 ELSE 1 END,
-                    bucket=excluded.bucket
-            """, (scope, client, bucket))
-            count = connection.execute(
-                "SELECT count FROM rate_windows WHERE scope=? AND client=?", (scope, client)
-            ).fetchone()[0]
-            return count > limit
+            connection.execute('DELETE FROM traffic_events WHERE timestamp<=?', (current - max(3600, window),))
+            count = connection.execute('SELECT COUNT(*) FROM traffic_events WHERE scope=? AND client=? AND timestamp>?',
+                (scope, client, current - window)).fetchone()[0]
+            if count >= limit:
+                return True
+            connection.execute('INSERT INTO traffic_events VALUES (?, ?, ?)', (scope, client, current))
+            return False
+
+    def acquire(self, token, client, total, per_client, ttl):
+        current = time.time()
+        with self.connect() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            connection.execute('DELETE FROM leases WHERE expires<=?', (current,))
+            rows = connection.execute('SELECT client FROM leases WHERE token LIKE ?', (token.split(':', 1)[0] + ':%',)).fetchall()
+            if len(rows) >= total or sum(row[0] == client for row in rows) >= per_client:
+                return False
+            connection.execute('INSERT INTO leases VALUES (?, ?, ?)', (token, client, current + ttl))
+            return True
+
+    def release(self, token):
+        with self.connect() as connection:
+            connection.execute('DELETE FROM leases WHERE token=?', (token,))
+
+    def probe_blocked(self, client, limit):
+        with self.connect() as connection:
+            return connection.execute('SELECT COUNT(*) FROM traffic_events WHERE scope=? AND client=? AND timestamp>?',
+                ('probes', client, time.time() - 60)).fetchone()[0] >= limit
+
+    @staticmethod
+    def identity(value):
+        return hashlib.sha256(value.encode('utf-8')).hexdigest()
+
+    def login_keys(self, ip, account):
+        return [self.identity('ip:' + ip), self.identity('account:' + account.casefold().strip())]
+
+    def login_locked(self, keys):
+        with self.connect() as connection:
+            return any(connection.execute('SELECT 1 FROM failures WHERE client=? AND locked_until>?',
+                (key, time.time())).fetchone() for key in keys)
+
+    def login_result(self, keys, failed):
+        current = time.time()
+        with self.connect() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            connection.execute('DELETE FROM failures WHERE expires<=?', (current,))
+            for key in keys:
+                if not failed:
+                    # Keep the IP history when other accounts are being attacked.
+                    if key == keys[-1]:
+                        connection.execute('DELETE FROM failures WHERE client=?', (key,))
+                    continue
+                row = connection.execute('SELECT * FROM failures WHERE client=?', (key,)).fetchone()
+                count = (row['count'] if row else 0) + 1
+                level = row['level'] if row else 0
+                locked = row['locked_until'] if row else 0
+                if count >= 5:
+                    locked = current + min(900, 30 * 2 ** min(level, 5))
+                    level += 1
+                    count = 0
+                connection.execute('INSERT OR REPLACE INTO failures VALUES (?, ?, ?, ?, ?)',
+                    (key, count, level, current + 1800, locked))

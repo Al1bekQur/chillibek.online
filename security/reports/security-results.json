@@ -1,0 +1,90 @@
+{
+  "generated_at": "2026-10-23T10:10:01.123745+00:00",
+  "python": "3.11.9",
+  "scope": "Local synthetic corpus and single-process WSGI benchmark; not production effectiveness or capacity.",
+  "corpus": {
+    "cases": 55,
+    "true_positives": 35,
+    "false_positives": 0,
+    "true_negatives": 20,
+    "false_negatives": 0,
+    "detection_rate_pct": 100.0,
+    "false_positive_rate_pct": 0.0
+  },
+  "detector_latency": {
+    "samples": 55,
+    "mean_ms": 0.0557,
+    "median_ms": 0.0144,
+    "p95_ms": 0.2096
+  },
+  "wsgi_latency": {
+    "raw_flask": {
+      "samples": 40,
+      "mean_ms": 0.1699,
+      "median_ms": 0.1632,
+      "p95_ms": 0.2062
+    },
+    "all_modules_on": {
+      "samples": 40,
+      "mean_ms": 50.9213,
+      "median_ms": 45.5246,
+      "p95_ms": 86.0555
+    },
+    "optional_modules_off": {
+      "samples": 40,
+      "mean_ms": 37.5933,
+      "median_ms": 37.4396,
+      "p95_ms": 39.2232
+    },
+    "on_over_raw_mean_ms": 50.7514,
+    "on_over_raw_pct": 29871.34
+  },
+  "python_tests": {
+    "tests": 212,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "tools": {
+    "bandit": {
+      "findings": [
+        {
+          "id": "B608",
+          "severity": "MEDIUM",
+          "file": "backend/server.py",
+          "line": 398
+        },
+        {
+          "id": "B608",
+          "severity": "MEDIUM",
+          "file": "backend/tools/import_sqlite_to_postgres.py",
+          "line": 48
+        },
+        {
+          "id": "B608",
+          "severity": "MEDIUM",
+          "file": "backend/tools/import_sqlite_to_postgres.py",
+          "line": 101
+        },
+        {
+          "id": "B105",
+          "severity": "LOW",
+          "file": "waf/scripts/start_dashboard.py",
+          "line": 22
+        }
+      ],
+      "scan_errors": []
+    },
+    "pip-audit": {
+      "packages": 46,
+      "advisory_records": 0,
+      "skipped": []
+    },
+    "unavailable": [
+      "Semgrep CE (not installed)",
+      "Trivy (not installed)",
+      "OWASP ZAP (not installed)",
+      "Docker (not installed)"
+    ]
+  }
+}

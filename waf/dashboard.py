@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import hashlib
 import json
 import secrets
 from collections import Counter, deque
@@ -22,11 +23,15 @@ from .policy import Policy
 
 EXTRA_RULES = [
     {"rule_id": "RATE-001", "category": "rate_limiting", "score": 5,
-     "description": "Per-client fixed-window request limit."},
+     "description": "Per-client and per-route sliding-window limits with concurrency admission."},
     {"rule_id": "HEADER-001", "category": "suspicious_headers", "score": 5,
      "description": "Ambiguous framing, method overrides and header control bytes."},
     {"rule_id": "SIZE-001", "category": "request_size", "score": 10,
      "description": "Streaming request body size limit."},
+    {'rule_id': 'BRUTE-001', 'category': 'brute_force', 'score': 5,
+     'description': 'Shared per-account and per-IP escalating login lockouts.'},
+    {'rule_id': 'BOT-001', 'category': 'bot_detection', 'score': 5,
+     'description': 'Repeated missing-endpoint probing, independent of User-Agent.'},
 ]
 
 
@@ -60,19 +65,27 @@ def dashboard_router(settings: WAFSettings) -> APIRouter:
         password = form.get("password", [""])[0][:256]
         csrf_token = form.get("csrf_token", [""])[0][:128]
         csrf_cookie = request.cookies.get(CSRF_COOKIE, "")
-        if not csrf_cookie or not hmac.compare_digest(csrf_cookie, csrf_token):
+        store = request.app.state.policy_store
+        keys = store.login_keys('operator:' + (request.client.host if request.client else 'unknown'), 'operator:' + username)
+        if store.login_locked(keys):
+            raise HTTPException(429, 'Too many login attempts.', headers={'Retry-After':'30'})
+        if not csrf_cookie or not hmac.compare_digest(csrf_cookie.encode(), csrf_token.encode()):
+            store.login_result(keys, True)
             raise HTTPException(status_code=400, detail="Invalid login request.")
         if not _auth_configured(settings):
             raise HTTPException(status_code=503, detail="Dashboard authentication is not configured.")
-        if not hmac.compare_digest(username, settings.dashboard_username or ""):
+        if not hmac.compare_digest(username.encode(), (settings.dashboard_username or "").encode()):
+            store.login_result(keys, True)
             raise HTTPException(status_code=401, detail="Invalid username or password.")
         try:
             valid_password = check_password_hash(settings.dashboard_password_hash or "", password)
         except (TypeError, ValueError):
             valid_password = False
         if not valid_password:
+            store.login_result(keys, True)
             raise HTTPException(status_code=401, detail="Invalid username or password.")
 
+        store.login_result(keys, False)
         serializer = _serializer(settings)
         destination = "/settings" if form.get("next", [""])[0] == "/settings" else "/dashboard"
         response = RedirectResponse(destination, status_code=303)
@@ -90,6 +103,14 @@ def dashboard_router(settings: WAFSettings) -> APIRouter:
     @router.post("/dashboard/logout")
     async def logout(request: Request):
         require_dashboard_auth(request, settings)
+        form = parse_qs((await request.body()).decode('utf-8', errors='replace'))
+        try:
+            token = _serializer(settings).loads(form.get('csrf_token', [''])[0], max_age=settings.dashboard_session_max_age)
+        except BadSignature:
+            raise HTTPException(403, 'Invalid CSRF token.') from None
+        expected = hashlib.sha256(request.cookies.get(SESSION_COOKIE, '').encode()).hexdigest()
+        if not isinstance(token, dict) or token.get('purpose') != 'logout' or not hmac.compare_digest(str(token.get('session', '')), expected):
+            raise HTTPException(403, 'Invalid CSRF token.')
         response = RedirectResponse("/dashboard/login", status_code=303)
         response.delete_cookie(SESSION_COOKIE)
         return response
@@ -98,7 +119,8 @@ def dashboard_router(settings: WAFSettings) -> APIRouter:
     async def dashboard(request: Request) -> HTMLResponse:
         if not _is_authenticated(request, settings):
             return RedirectResponse("/dashboard/login", status_code=303)
-        return HTMLResponse(_dashboard_html())
+        csrf = _serializer(settings).dumps({'purpose': 'logout', 'session': hashlib.sha256(request.cookies.get(SESSION_COOKIE, '').encode()).hexdigest()})
+        return HTMLResponse(_dashboard_html(csrf))
 
     @router.get("/dashboard/api/summary")
     async def api_summary(
@@ -164,7 +186,7 @@ def require_dashboard_auth(request: Request, settings: WAFSettings) -> str:
         raise HTTPException(status_code=401, detail="Dashboard authentication required.") from None
     username = payload.get("username") if isinstance(payload, dict) else None
     if not isinstance(username, str) or not hmac.compare_digest(
-        username, settings.dashboard_username or ""
+        username.encode(), (settings.dashboard_username or "").encode()
     ):
         raise HTTPException(status_code=401, detail="Dashboard authentication required.")
     return username
@@ -342,7 +364,7 @@ def _login_html(configured: bool, csrf_token: str, settings_next: bool = False) 
 </html>"""
 
 
-def _dashboard_html() -> str:
+def _dashboard_html(csrf_token) -> str:
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -358,7 +380,7 @@ def _dashboard_html() -> str:
       <h1>Security Dashboard</h1>
     </div>
     <a href="/settings">Security Settings</a>
-    <form method="post" action="/dashboard/logout"><button class="ghost" type="submit">Logout</button></form>
+    <form method="post" action="/dashboard/logout"><input type="hidden" name="csrf_token" value="{escape(csrf_token)}"><button class="ghost" type="submit">Logout</button></form>
   </header>
   <main>
     <section class="filters">

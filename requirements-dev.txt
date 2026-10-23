@@ -1,2 +1,4 @@
 -r requirements.txt
 pytest>=8.3,<10
+setuptools>=83.0.0
+defusedxml>=0.7.1,<1

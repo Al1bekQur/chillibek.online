@@ -176,9 +176,6 @@ async def test_size_toggle_and_monitor(control):
 @pytest.mark.anyio
 @pytest.mark.parametrize('headers', [
     {'x-http-method-override': 'DELETE'}, {'x-method-override': 'PUT'},
-    {'x-test': 'synthetic\x7fvalue'},
-    {'transfer-encoding': 'chunked', 'content-length': '1'},
-    [('content-length', '1'), ('content-length', '2')],
 ])
 async def test_suspicious_headers_toggle(control, headers):
     client, _, settings, _ = control
@@ -216,6 +213,7 @@ async def test_event_logging_off_preserves_audit_auth_and_dashboard(control):
     client, app, settings, _ = control
     assert (await update(client, event_logging=False, mode='monitor', **{name: False for name in (
         'sql_injection', 'xss', 'path_traversal', 'rate_limiting', 'suspicious_headers', 'request_size',
+        'command_injection', 'brute_force', 'bot_detection',
     )})).status_code == 200
     assert (await client.get('/api/menu')).status_code == 200
     assert not settings.log_path.exists()

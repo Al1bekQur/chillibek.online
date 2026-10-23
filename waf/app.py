@@ -1,4 +1,9 @@
+import asyncio
 import json
+import re
+import secrets
+import base64
+import hashlib
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,11 +12,14 @@ from typing import Mapping
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 from .config import WAFSettings
-from .dashboard import dashboard_router, require_dashboard_auth
+from .dashboard import dashboard_router, require_dashboard_auth, _css, _javascript
 from .policy import Policy, PolicyStore
 from .rules import inspect_headers, inspect_values
+from .parsing import request_values
+from .protocol import ProtocolGuard
 from .settings_api import settings_router
 
 
@@ -38,6 +46,11 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
     app.include_router(dashboard_router(settings))
     app.include_router(settings_router(settings, store))
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, error):
+        # Default validation errors echo rejected inputs, potentially secrets.
+        return JSONResponse({'detail': [{'type': item['type'], 'loc': item['loc']} for item in error.errors()]}, status_code=422)
+
     @app.middleware("http")
     async def management_security(request: Request, call_next):
         management = request.url.path.startswith(("/waf-api/", "/dashboard"))
@@ -59,16 +72,25 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
                     try:
                         require_dashboard_auth(request, settings)
                     except HTTPException as error:
-                        store.audit(None, "access", {"path": request.url.path[:240], "status": error.status_code})
+                        store.audit(None, "access", {"path": safe_path(request.url.path), "status": error.status_code})
                         return JSONResponse({"detail": error.detail}, status_code=error.status_code,
                                             headers={"Cache-Control": "no-store"})
             response = await call_next(request)
             if management:
-                store.audit(actor, "access", {"path": request.url.path[:240], "method": request.method,
+                store.audit(actor, "access", {"path": safe_path(request.url.path), "method": request.method,
                                                "status": response.status_code})
                 response.headers["Cache-Control"] = "no-store"
                 response.headers["X-Frame-Options"] = "DENY"
             response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers['X-Frame-Options'] = 'DENY'
+            response.headers['Referrer-Policy'] = 'no-referrer'
+            script_hash = base64.b64encode(hashlib.sha256(_javascript().encode()).digest()).decode()
+            style_hash = base64.b64encode(hashlib.sha256(_css().encode()).digest()).decode()
+            if management or request.url.path.startswith('/settings'):
+                response.headers['Content-Security-Policy'] = ("default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
+                    "form-action 'self'; script-src 'self' 'sha256-" + script_hash + "'; style-src 'self' 'sha256-" + style_hash + "'")
+            if request.url.scheme == 'https':
+                response.headers['Strict-Transport-Security'] = 'max-age=31536000'
             return response
         except (sqlite3.Error, OSError):
             return JSONResponse({"detail": "WAF policy storage unavailable."}, status_code=503,
@@ -76,10 +98,10 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict[str, str]:
+        store.read()
         return {
             "status": "ok",
             "component": "chillibek-waf",
-            "upstream": settings.upstream_base_url,
         }
 
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
@@ -89,10 +111,11 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
         policy = Policy.model_validate(store.read()["policy"])
         matched_rules, risk_score = [], 0
         block_status = 403
-        if policy.rate_limiting and store.over_limit(
-            "proxy", request.client.host if request.client else "unknown",
-            settings.rate_limit_requests, settings.rate_limit_window_seconds,
-        ):
+        ip = request.client.host if request.client else "unknown"
+        route = safe_path(request.url.path)
+        if policy.rate_limiting and (store.over_limit(
+            "proxy", ip, settings.rate_limit_requests, settings.rate_limit_window_seconds,
+        ) or store.over_limit('route:' + route, ip, settings.route_limit_requests, settings.rate_limit_window_seconds)):
             matched_rules.append("RATE-001")
             risk_score += settings.block_threshold
             block_status = 429
@@ -117,13 +140,40 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
         if oversized:
             matched_rules.append("SIZE-001")
             risk_score += 10
-        enabled = {name for name in ("sql_injection", "xss", "path_traversal") if getattr(policy, name)}
-        detected, score = inspect_values(_collect_inspection_values(path, request, body), enabled)
+        enabled = {name for name in ("sql_injection", "xss", "path_traversal", "command_injection") if getattr(policy, name)}
+        try:
+            values = _collect_inspection_values(path, request, body)
+        except (ValueError, UnicodeError, RecursionError):
+            _write_log(settings, request, 'blocked', ['PARSE-001'], 0, 400, policy)
+            return JSONResponse({'detail': 'Malformed request data.'}, status_code=400)
+        detected, score = inspect_values(values, enabled)
         matched_rules.extend(detected)
         risk_score += score
         if risk_score >= settings.block_threshold and policy.mode == "block":
             _write_log(settings, request, "blocked", matched_rules, risk_score, 403, policy)
             return JSONResponse({"success": False, "message": "Request blocked by WAF."}, status_code=403)
+
+        if policy.bot_detection:
+            # 404s are counted from actual upstream outcomes, not User-Agent labels.
+            if store.probe_blocked(ip, settings.bot_probe_limit):
+                matched_rules.append('BOT-001')
+                risk_score += settings.block_threshold
+                if policy.mode == 'block':
+                    _write_log(settings, request, 'blocked', matched_rules, risk_score, 429, policy)
+                    return JSONResponse({'detail': 'Temporary probe limit.'}, status_code=429)
+        login_keys = None
+        if policy.brute_force and path == 'api/staff/login' and request.method == 'POST':
+            try:
+                account = json.loads(body).get('username', '')
+            except (ValueError, AttributeError):
+                account = ''
+            login_keys = store.login_keys(ip, account[:80] if isinstance(account, str) else '')
+            if store.login_locked(login_keys):
+                matched_rules.append('BRUTE-001')
+                risk_score += settings.block_threshold
+                if policy.mode == 'block':
+                    _write_log(settings, request, 'blocked', matched_rules, settings.block_threshold, 429, policy)
+                    return JSONResponse({'detail': 'Too many login attempts.'}, status_code=429, headers={'Retry-After': '30'})
 
         upstream_url = _build_upstream_url(settings, path, request.url.query)
         headers = _forward_headers(request.headers)
@@ -131,20 +181,44 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
         headers["x-forwarded-proto"] = request.url.scheme
         headers["x-forwarded-host"] = request.headers.get("host", "")
 
+        lease = 'proxy:' + secrets.token_hex(16)
+        acquired = False
+        if policy.rate_limiting:
+            acquired = store.acquire(lease, ip, settings.max_concurrent_requests,
+                                     settings.max_concurrent_per_ip, settings.request_timeout_seconds + 30)
+            if not acquired:
+                matched_rules.append('CONCURRENT-001')
+                if policy.mode == 'block':
+                    _write_log(settings, request, 'blocked', matched_rules, settings.block_threshold, 429, policy)
+                    return JSONResponse({'detail': 'Too many concurrent requests.'}, status_code=429)
         try:
             async with httpx.AsyncClient(
                 timeout=settings.upstream_timeout_seconds,
                 transport=settings.upstream_transport,
             ) as client:
-                upstream_response = await client.request(
+                upstream_response = await asyncio.wait_for(client.request(
                     request.method,
                     upstream_url,
                     content=body,
                     headers=headers,
-                )
+                ), timeout=settings.request_timeout_seconds)
+        except asyncio.TimeoutError:
+            _write_log(settings, request, 'upstream_error', ['TIMEOUT-001'], 0, 504, policy)
+            return JSONResponse({'detail': 'Upstream request timed out.'}, status_code=504)
         except httpx.HTTPError:
             _write_log(settings, request, "upstream_error", matched_rules, risk_score, 502, policy)
             return JSONResponse({"success": False, "message": "Upstream unavailable."}, status_code=502)
+        finally:
+            if acquired:
+                store.release(lease)
+
+        if login_keys:
+            store.login_result(login_keys, upstream_response.status_code in {400, 401, 403})
+            if upstream_response.status_code in {400, 401, 403}:
+                matched_rules.append('BRUTE-FAIL-001')
+        if policy.bot_detection and upstream_response.status_code == 404:
+            store.over_limit('probes', ip, settings.bot_probe_limit, 60)
+            matched_rules.append('BOT-PROBE-001')
 
         response_headers = _response_headers(upstream_response.headers)
         _write_log(settings, request, "allowed", matched_rules, risk_score, upstream_response.status_code, policy)
@@ -161,17 +235,26 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
                 response.headers.append("set-cookie", cookie)
         return response
 
+    app.add_middleware(ProtocolGuard, settings=settings, store=store)
     return app
 
 
+def safe_path(path):
+    """Only known route templates enter logs/counter keys; never arbitrary path data."""
+    if path in {'/api/menu', '/api/menu/add', '/api/staff/login', '/api/orders', '/api/orders/archive',
+                '/dashboard', '/dashboard/login', '/dashboard/logout', '/waf-api/settings', '/waf-api/settings/reset'}:
+        return path
+    if re.fullmatch(r'/api/(?:orders|menu/(?:edit|delete))/[0-9]+', path):
+        return re.sub(r'/[0-9]+$', '/:id', path)
+    return '/[unrecognized]'
+
+
 def _collect_inspection_values(path: str, request: Request, body: bytes) -> list[str]:
-    values = ["/" + path, request.url.query]
+    values = request_values('/' + path, request.url.query, request.headers.get('content-type', ''), body)
+    values.append(request.scope.get('raw_path', b'').decode('utf-8', 'replace'))
     for name, value in request.headers.items():
         if name.lower() in INSPECTED_HEADERS:
             values.append(value)
-    content_type = request.headers.get("content-type", "")
-    if body and _is_textual(content_type):
-        values.append(body.decode("utf-8", errors="replace"))
     return values
 
 
@@ -195,19 +278,21 @@ def _build_upstream_url(settings: WAFSettings, path: str, query: str) -> str:
 
 def _forward_headers(headers: Mapping[str, str]) -> dict[str, str]:
     forwarded = {}
+    connection_tokens = {value.strip().lower() for value in headers.get('connection', '').split(',')}
     for name, value in headers.items():
         lowered = name.lower()
-        if lowered in HOP_BY_HOP_HEADERS or lowered == "host" or lowered.startswith("x-forwarded-"):
+        if lowered in HOP_BY_HOP_HEADERS | connection_tokens or lowered in {"host", "forwarded", "x-real-ip", "content-length"} or lowered.startswith("x-forwarded-"):
             continue
         forwarded[name] = value
     return forwarded
 
 
 def _response_headers(headers: httpx.Headers) -> dict[str, str]:
+    connection_tokens = {value.strip().lower() for value in headers.get('connection', '').split(',')}
     return {
         name: value
         for name, value in headers.items()
-        if name.lower() not in HOP_BY_HOP_HEADERS | SENSITIVE_HEADERS
+        if name.lower() not in HOP_BY_HOP_HEADERS | SENSITIVE_HEADERS | connection_tokens | {'content-length', 'content-encoding'}
     }
 
 
@@ -228,7 +313,7 @@ def _write_log(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "client_ip": request.client.host if request.client else "unknown",
         "method": request.method,
-        "path": request.url.path,
+        "path": safe_path(request.url.path),
         "query_present": bool(request.url.query),
         "content_length": request.headers.get("content-length"),
         "matched_rules": matched_rules,

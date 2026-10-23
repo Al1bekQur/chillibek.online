@@ -45,6 +45,7 @@ def main():
                 server.serve_forever()
             except KeyboardInterrupt:
                 pass
+        application.close()
         restaurant.config['DB_ENGINE'].dispose()
 
 

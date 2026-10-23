@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     Integer,
+    Float,
     MetaData,
     String,
     Table,
@@ -20,6 +21,15 @@ from sqlalchemy.engine import Connection, Engine
 
 
 metadata = MetaData()
+
+login_attempts = Table(
+    'login_attempts', metadata,
+    Column('identity', String(64), primary_key=True),
+    Column('attempts', Integer, nullable=False),
+    Column('level', Integer, nullable=False),
+    Column('reset_at', Float, nullable=False),
+    Column('locked_until', Float, nullable=False),
+)
 
 menu_items = Table(
     "menu_items",

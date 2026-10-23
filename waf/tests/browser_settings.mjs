@@ -111,7 +111,9 @@ try {
     ['mode', 'Master WAF Block mode'], ['sql_injection', 'SQL Injection Protection'],
     ['xss', 'XSS Protection'], ['path_traversal', 'Path Traversal Protection'],
     ['rate_limiting', 'Rate Limiting'], ['suspicious_headers', 'Suspicious Header Detection'],
-    ['request_size', 'Request Size Protection'], ['event_logging', 'Security Event Logging']
+    ['request_size', 'Request Size Protection'], ['event_logging', 'Security Event Logging'],
+    ['command_injection', 'Command Injection Protection'], ['brute_force', 'Login Abuse Protection'],
+    ['bot_detection', 'Scanner Behavior Protection']
   ]) {
     const before = await evaluate(snapshot);
     const changed = key === 'mode' ? 'monitor' : false;
@@ -130,7 +132,7 @@ try {
     await waitFor(`${enabled(label)} && ${checked(label)} === 'true'`);
     assert.deepEqual((await evaluate(snapshot)).policy, before.policy);
   }
-  pass('All eight switches save independently, survive page refresh, and restore');
+  pass('All eleven switches save independently, survive page refresh, and restore');
 
   await mkdir('waf/local', {recursive: true});
   for (const [name, width, height] of [['desktop', 1440, 1300], ['mobile', 390, 844]]) {

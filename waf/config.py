@@ -24,3 +24,12 @@ class WAFSettings:
     dashboard_secure_cookies: bool = os.getenv("WAF_SECURE_COOKIES", "true").lower() == "true"
     rate_limit_requests: int = 120
     rate_limit_window_seconds: int = 60
+    route_limit_requests: int = 90
+    max_concurrent_requests: int = 32
+    max_concurrent_per_ip: int = 8
+    request_timeout_seconds: float = 15.0
+    body_timeout_seconds: float = 5.0
+    hard_max_request_bytes: int = 4 * 1024 * 1024
+    max_header_count: int = 80
+    max_header_bytes: int = 16384
+    bot_probe_limit: int = 12

@@ -14,11 +14,13 @@ os.environ["FLASK_SECRET_KEY"] = "test-only-secret-key-never-use-outside-tests"
 os.environ["DATABASE_PATH"] = str(Path(TEST_DATABASE.name) / "import-only.sqlite3")
 
 from server import create_app, get_db_connection  # noqa: E402
+import server as imported_server
+imported_server.app.config['DB_ENGINE'].dispose()
 
 
 @pytest.fixture
 def app(tmp_path):
-    return create_app(
+    instance = create_app(
         {
             "TESTING": True,
             "SECRET_KEY": "test-only-secret-key-never-use-outside-tests",
@@ -27,6 +29,8 @@ def app(tmp_path):
             "RATELIMIT_STORAGE_URI": "memory://",
         }
     )
+    yield instance
+    instance.config['DB_ENGINE'].dispose()
 
 
 @pytest.fixture

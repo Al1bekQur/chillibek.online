@@ -254,7 +254,9 @@ def test_flask_staff_login_limits_keep_distinct_real_clients(staging):
     payload = {'username': 'synthetic-unknown', 'password': 'synthetic-invalid'}
     responses = [client.post('/api/staff/login', json=payload, headers=first).status_code for _ in range(6)]
     assert responses == [401] * 5 + [429]
-    assert client.post('/api/staff/login', json=payload, headers={**first, 'X-Real-IP': '192.0.2.11'}).status_code == 401
+    # A distributed attack on the SAME account is now limited by Flask too.
+    assert client.post('/api/staff/login', json=payload, headers={**first, 'X-Real-IP': '192.0.2.11'}).status_code == 429
+    assert client.post('/api/staff/login', json={**payload, 'username':'synthetic-another'}, headers={**first, 'X-Real-IP': '192.0.2.12'}).status_code == 401
 
 
 def test_disabled_proxy_rate_limit_cannot_disable_operator_login_throttle(staging):
@@ -269,6 +271,7 @@ CONTROL_CASES = [
     ('sql_injection', False, 403, 200),
     ('xss', False, 403, 200),
     ('path_traversal', False, 403, 200),
+    ('command_injection', False, 403, 200),
     ('rate_limiting', False, 429, 200),
     ('suspicious_headers', False, 403, 200),
     ('request_size', False, 413, 200),
@@ -280,7 +283,7 @@ def probe_control(client, settings, field):
     """Observe behavior of actual restaurant traffic, not just returned policy JSON."""
     options = {'environ_overrides': {'REMOTE_ADDR': '192.0.2.20'}}
     payloads = {'mode': "' OR 1=1 --", 'sql_injection': "' OR 1=1 --",
-                'xss': '<script>alert(1)</script>', 'path_traversal': '../../etc/passwd'}
+                'xss': '<script>alert(1)</script>', 'path_traversal': '../../etc/passwd', 'command_injection':'x; whoami'}
     if field in payloads:
         return client.get('/api/menu', query_string={'q': payloads[field]}, **options).status_code
     if field == 'rate_limiting':

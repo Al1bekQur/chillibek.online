@@ -1,5 +1,8 @@
 # Chillibek WAF Phase 1
 
+Current security-engine findings, eleven controls, reproducible verification and
+measured limitations: [`SECURITY_REPORT.md`](../SECURITY_REPORT.md).
+
 For the no-new-provider PythonAnywhere Free option, see
 [`PYTHONANYWHERE_WAF.md`](../PYTHONANYWHERE_WAF.md). `waf.wsgi.protect_wsgi` adapts
 this same WAF around an existing Flask callable inside one managed WSGI app.

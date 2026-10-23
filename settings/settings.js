@@ -8,12 +8,15 @@
     return;
   }
   const modules = [
-    ['sql_injection', 'SQL Injection Protection', 'Inspect requests for SQL keywords, boolean injection, and comment operators.'],
+    ['sql_injection', 'SQL Injection Protection', 'Inspect parsed fields for SQL sequences, boolean conditions, delay functions, and obfuscation.'],
     ['xss', 'XSS Protection', 'Detect script tags, event handlers, and JavaScript URLs.'],
     ['path_traversal', 'Path Traversal Protection', 'Detect encoded traversal sequences and sensitive file paths.'],
-    ['rate_limiting', 'Rate Limiting', 'Limit request bursts per client IP.'],
-    ['suspicious_headers', 'Suspicious Header Detection', 'Detect ambiguous framing, method overrides, and control characters.'],
-    ['request_size', 'Request Size Protection', 'Inspect incoming body size before forwarding to the application.']
+    ['command_injection', 'Command Injection Protection', 'Detect shell substitution and chained executable commands.'],
+    ['suspicious_headers', 'Suspicious Header Detection', 'Detect method-override headers. Unsafe HTTP framing is always rejected.'],
+    ['rate_limiting', 'Rate Limiting', 'Limit request bursts per client IP, route, and concurrent requests.'],
+    ['request_size', 'Request Size Protection', 'Apply the configured body-size limit. A hard resource ceiling always remains active.'],
+    ['brute_force', 'Login Abuse Protection', 'Track failed staff logins across IPs and accounts with escalating temporary lockouts. Backend login limits always remain active.'],
+    ['bot_detection', 'Scanner Behavior Protection', 'Detect repeated missing-endpoint probing without trusting User-Agent labels.']
   ];
   const $ = id => document.getElementById(id);
   let snapshot = null;
@@ -34,6 +37,11 @@
     return box;
   }
   modules.forEach(([key, label, description], index) => {
+    const heading = {sql_injection: 'Request content', rate_limiting: 'Resource limits', brute_force: 'Behavior and login abuse'}[key];
+    if (heading) {
+      const group = document.createElement('h3'); group.className = 'nav-label'; group.textContent = heading;
+      $('rules').appendChild(group);
+    }
     const row = document.createElement('div'); row.className = 'rule';
     const number = document.createElement('span'); number.className = 'rule-number';
     number.textContent = String(index + 1).padStart(2, '0');
@@ -75,7 +83,7 @@
     $('revision').textContent = `Confirmed policy · revision ${data.revision}`;
     $('auth').hidden = true;
     if (data.limits) {
-      $('rate_limitingDetail').textContent = `Allow ${data.limits.rate_requests} requests per ${data.limits.rate_window_seconds}s per client IP in a fixed window.`;
+      $('rate_limitingDetail').textContent = `Allow ${data.limits.rate_requests} requests per ${data.limits.rate_window_seconds}s per client IP in a sliding window, with route and concurrency limits.`;
       $('request_sizeDetail').textContent = `Inspect request body size against a ${data.limits.request_bytes.toLocaleString()} byte limit.`;
     }
   }
