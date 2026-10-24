@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>CHILLIBEK WAF — Security Settings</title>
+  <link rel="stylesheet" href="./settings.css">
+  <script src="./settings.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/dashboard"><span class="brand-icon" aria-hidden="true">C</span><span>CHILLIBEK <b>WAF</b><small>SECURITY OPERATIONS</small></span></a>
+    <div class="nav-label">WORKSPACE</div>
+    <nav aria-label="Security navigation">
+      <a href="/dashboard"><span aria-hidden="true">▦</span> Overview <span class="arrow">↗</span></a>
+      <a href="./" aria-current="page"><span aria-hidden="true">⚙</span> Security Settings</a>
+      <a href="https://chillibek.online/"><span aria-hidden="true">⌂</span> Restaurant <span class="arrow">↗</span></a>
+    </nav>
+    <div class="sidebar-note"><span class="tiny-dot"></span> ALWAYS ENFORCED<p>Authentication, authorization, CSRF, protocol safety and configuration auditing remain active in every mode.</p></div>
+    <div class="sidebar-footer">CHILLIBEK / CONTROL PLANE</div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div><span class="muted">Workspace</span><span class="slash">/</span>Security Settings</div><a href="/dashboard">Open Dashboard ↗</a></header>
+    <main>
+      <div class="page-heading"><div><div class="eyebrow">POLICY MANAGEMENT</div><h1>Security Settings<span>.</span></h1><p>Configure how your firewall inspects and handles incoming traffic.</p></div><span class="environment">CHILLIBEK WAF</span></div>
+      <section class="status-grid" aria-label="Live configuration status">
+        <article class="status-card"><div class="card-label">PROTECTION STATUS</div><div id="protection" class="status-value unknown">Unknown</div><p id="protectionDetail">Waiting for the WAF backend</p></article>
+        <article class="status-card"><div class="card-label">LAST CONFIGURATION UPDATE</div><div id="updated" class="status-value date">—</div><p id="updatedBy">No configuration loaded</p></article>
+        <article class="status-card"><div class="card-label">POLICY CONNECTION</div><div id="connection" class="status-value unknown">Connecting…</div><p id="revision">Authenticating with the WAF</p></article>
+      </section>
+      <div class="notice" id="notice" role="status" aria-live="polite">Reading the current server policy…</div>
+      <div id="auth" class="auth" hidden><p>Sign in with your WAF operator account to manage protection.</p><a class="button primary" href="/dashboard/login?next=/settings">Sign in to WAF ↗</a></div>
+      <section class="panel master-panel" aria-labelledby="master-title">
+        <div class="section-icon" aria-hidden="true">◈</div><div class="master-copy"><div class="eyebrow">FIREWALL MODE</div><h2 id="master-title">Master WAF</h2><p>Block rejects requests that match enabled protections. Monitor forwards them and records detections when event logging is on.</p></div>
+        <div class="control"><span id="modeState" class="state unknown">Unknown</span><button id="mode" type="button" class="switch" role="switch" aria-label="Master WAF Block mode" aria-checked="false" disabled><span></span></button><small>Monitor / Block</small></div>
+      </section>
+      <section class="panel modules" aria-labelledby="modules-title">
+        <div class="panel-heading"><div><h2 id="modules-title">Protection modules</h2><p>Changes apply immediately after the server confirms them.</p></div><span class="tag">LIVE POLICY</span></div>
+        <div id="rules"></div>
+      </section>
+      <section class="panel logging" aria-labelledby="logging-title"><div><div class="eyebrow">OBSERVABILITY</div><h2 id="logging-title">Security Event Logging</h2><p>Record request decisions, matched rules, and risk scores in the Dashboard. Configuration audit logging always stays enabled.</p></div><div id="loggingControl"></div></section>
+      <div class="actions"><div><span class="tiny-dot"></span> <span id="saveHint">A live connection is required to change settings.</span></div><div class="action-buttons"><button id="refresh" class="button">Refresh</button><button id="reset" class="button danger" disabled>Reset to Defaults</button><button id="save" class="button primary" disabled>Save Settings</button></div></div>
+      <footer>CHILLIBEK WAF <span>Policy changes persist across service restarts.</span></footer>
+      <noscript><p class="notice">JavaScript is required to read and update the live WAF policy.</p></noscript>
+    </main>
+  </div>
+</body>
+</html>

@@ -6,43 +6,43 @@
   <meta name="robots" content="noindex,nofollow">
   <title>CHILLIBEK WAF — Security Settings</title>
   <link rel="stylesheet" href="./settings.css">
-  <script src="./settings.js" defer></script>
 </head>
 <body>
   <aside class="sidebar">
-    <a class="brand" href="/dashboard"><span class="brand-icon" aria-hidden="true">C</span><span>CHILLIBEK <b>WAF</b><small>SECURITY OPERATIONS</small></span></a>
+    <a class="brand" href="https://kali.pythonanywhere.com/dashboard"><span class="brand-icon" aria-hidden="true">C</span><span>CHILLIBEK <b>WAF</b><small>SECURITY OPERATIONS</small></span></a>
     <div class="nav-label">WORKSPACE</div>
     <nav aria-label="Security navigation">
-      <a href="/dashboard"><span aria-hidden="true">▦</span> Overview <span class="arrow">↗</span></a>
+      <a href="https://kali.pythonanywhere.com/dashboard"><span aria-hidden="true">▦</span> Overview <span class="arrow">↗</span></a>
       <a href="./" aria-current="page"><span aria-hidden="true">⚙</span> Security Settings</a>
       <a href="https://chillibek.online/"><span aria-hidden="true">⌂</span> Restaurant <span class="arrow">↗</span></a>
     </nav>
-    <div class="sidebar-note"><span class="tiny-dot"></span> ALWAYS ENFORCED<p>Authentication, authorization, CSRF, protocol safety and configuration auditing remain active in every mode.</p></div>
+    <div class="sidebar-note">OPERATOR ACCESS<p>Sign in on the WAF server to read and manage the enforced policy.</p></div>
     <div class="sidebar-footer">CHILLIBEK / CONTROL PLANE</div>
   </aside>
   <div class="workspace">
-    <header class="topbar"><div><span class="muted">Workspace</span><span class="slash">/</span>Security Settings</div><a href="/dashboard">Open Dashboard ↗</a></header>
+    <header class="topbar"><div><span class="muted">Workspace</span><span class="slash">/</span>Security Settings</div><a href="https://kali.pythonanywhere.com/dashboard">Open Dashboard ↗</a></header>
     <main>
-      <div class="page-heading"><div><div class="eyebrow">POLICY MANAGEMENT</div><h1>Security Settings<span>.</span></h1><p>Configure how your firewall inspects and handles incoming traffic.</p></div><span class="environment">CHILLIBEK WAF</span></div>
-      <section class="status-grid" aria-label="Live configuration status">
-        <article class="status-card"><div class="card-label">PROTECTION STATUS</div><div id="protection" class="status-value unknown">Unknown</div><p id="protectionDetail">Waiting for the WAF backend</p></article>
-        <article class="status-card"><div class="card-label">LAST CONFIGURATION UPDATE</div><div id="updated" class="status-value date">—</div><p id="updatedBy">No configuration loaded</p></article>
-        <article class="status-card"><div class="card-label">POLICY CONNECTION</div><div id="connection" class="status-value unknown">Connecting…</div><p id="revision">Authenticating with the WAF</p></article>
+      <div class="page-heading"><div><div class="eyebrow">POLICY MANAGEMENT</div><h1>Security Settings<span>.</span></h1><p>Manage protection for the CHILLIBEK restaurant API.</p></div><span class="environment">CHILLIBEK WAF</span></div>
+      <section class="panel master-panel" aria-labelledby="manage-title">
+        <div class="master-copy"><div class="eyebrow">AUTHENTICATED MANAGEMENT</div><h2 id="manage-title">Manage live WAF</h2><p>Open the WAF server and sign in with your existing Dashboard account. Read the current policy, change protections, and confirm saved settings there.</p></div>
+        <a id="manageLive" class="button primary" href="https://kali.pythonanywhere.com/settings">Manage live WAF ↗</a>
       </section>
-      <div class="notice" id="notice" role="status" aria-live="polite">Reading the current server policy…</div>
-      <div id="auth" class="auth" hidden><p>Sign in with your WAF operator account to manage protection.</p><a class="button primary" href="/dashboard/login?next=/settings">Sign in to WAF ↗</a></div>
-      <section class="panel master-panel" aria-labelledby="master-title">
-        <div class="section-icon" aria-hidden="true">◈</div><div class="master-copy"><div class="eyebrow">FIREWALL MODE</div><h2 id="master-title">Master WAF</h2><p>Block rejects requests that match enabled protections. Monitor forwards them and records detections when event logging is on.</p></div>
-        <div class="control"><span id="modeState" class="state unknown">Unknown</span><button id="mode" type="button" class="switch" role="switch" aria-label="Master WAF Block mode" aria-checked="false" disabled><span></span></button><small>Monitor / Block</small></div>
-      </section>
+      <div class="notice">This public page does not read the live policy. Protection status and saved settings are available after sign-in on the WAF server.</div>
       <section class="panel modules" aria-labelledby="modules-title">
-        <div class="panel-heading"><div><h2 id="modules-title">Protection modules</h2><p>Changes apply immediately after the server confirms them.</p></div><span class="tag">LIVE POLICY</span></div>
-        <div id="rules"></div>
+        <div class="panel-heading"><div><h2 id="modules-title">Available protection controls</h2><p>Each control reads and saves the server policy in the authenticated interface.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>Master WAF</h3><p>Block or Monitor mode.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>SQL Injection Protection</h3><p>Inspect SQL patterns and obfuscation.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>XSS Protection</h3><p>Inspect scripts, event handlers, and JavaScript URLs.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>Path Traversal Protection</h3><p>Inspect traversal sequences and sensitive paths.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>Command Injection Protection</h3><p>Inspect shell substitutions and chained commands.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>Suspicious Header Detection</h3><p>Detect method-override headers.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>Rate Limiting</h3><p>Limit request bursts and concurrent requests.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>Request Size Protection</h3><p>Apply the configured body-size limit.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>Login Abuse Protection</h3><p>Detect repeated failed staff logins.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>Scanner Behavior Protection</h3><p>Detect repeated missing-endpoint probing.</p></div></div>
+        <div class="rule"><div class="rule-copy"><h3>Security Event Logging</h3><p>Record request decisions and detections.</p></div></div>
       </section>
-      <section class="panel logging" aria-labelledby="logging-title"><div><div class="eyebrow">OBSERVABILITY</div><h2 id="logging-title">Security Event Logging</h2><p>Record request decisions, matched rules, and risk scores in the Dashboard. Configuration audit logging always stays enabled.</p></div><div id="loggingControl"></div></section>
-      <div class="actions"><div><span class="tiny-dot"></span> <span id="saveHint">A live connection is required to change settings.</span></div><div class="action-buttons"><button id="refresh" class="button">Refresh</button><button id="reset" class="button danger" disabled>Reset to Defaults</button><button id="save" class="button primary" disabled>Save Settings</button></div></div>
-      <footer>CHILLIBEK WAF <span>Policy changes persist across service restarts.</span></footer>
-      <noscript><p class="notice">JavaScript is required to read and update the live WAF policy.</p></noscript>
+      <footer>CHILLIBEK WAF <span>Authentication, CSRF protection and configuration auditing stay enforced.</span></footer>
     </main>
   </div>
 </body>

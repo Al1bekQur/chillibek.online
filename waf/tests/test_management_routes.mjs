@@ -1,35 +1,39 @@
-// Execute the actual public entry script without network access or credentials.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import test from 'node:test';
-import vm from 'node:vm';
 
-const source = readFileSync(new URL('../../settings/settings.js', import.meta.url), 'utf8');
-for (const origin of ['https://chillibek.online', 'https://www.chillibek.online']) {
-  for (const search of ['', '?next=https://untrusted.invalid&token=synthetic-never-forward']) {
-    test(`Public settings navigates to a fixed secure management URL: ${origin}${search}`, () => {
-      const destinations = [];
-      const context = {window: {location: {origin, search, hash: '#untrusted-fragment', replace: url => destinations.push(url)}}};
-      // A public entry must return before touching DOM state, cookies, storage or APIs.
-      vm.runInNewContext(source, context);
-      assert.deepEqual(destinations, ['https://kali.pythonanywhere.com/settings/']);
-    });
-  }
-}
-test('Backend and staging origins render the existing same-origin policy panel', () => {
-  for (const origin of ['https://kali.pythonanywhere.com', 'http://127.0.0.1:8765', 'https://chillibek.online.untrusted.invalid']) {
-    let rendered = false;
-    const context = {
-      window: {location: {origin, replace: () => assert.fail('Unexpected management redirect')}},
-      document: {createElement: () => { rendered = true; throw new Error('Reached local panel rendering'); }},
-    };
-    assert.throws(() => vm.runInNewContext(source, context), /Reached local panel rendering/);
-    assert.equal(rendered, true);
-  }
+const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
+const gateway = read('../../settings/index.html');
+const panel = read('../templates/settings.html');
+const source = read('../../settings/settings.js');
+
+test('Public Settings stays accessible and offers an explicit fixed management link', () => {
+  assert.match(gateway, /id="manageLive"[^>]+href="https:\/\/kali\.pythonanywhere\.com\/settings"/);
+  assert.ok(gateway.includes('Manage live WAF ↗'));
+  assert.doesNotMatch(gateway, /<script|http-equiv="refresh"|\/waf-api\//i);
+  assert.ok(gateway.includes('This public page does not read the live policy.'));
+  assert.equal((gateway.match(/class="rule"/g) || []).length, 11);
 });
-test('Public Dashboard gateway points only to the authenticated backend route', () => {
-  const gateway = readFileSync(new URL('../../dashboard/index.html', import.meta.url), 'utf8');
-  assert.ok(gateway.includes('content="0;url=https://kali.pythonanywhere.com/dashboard"'));
+
+test('Public navigation opens Dashboard on the management host', () => {
   assert.ok(gateway.includes('href="https://kali.pythonanywhere.com/dashboard"'));
-  assert.equal(/(?:password|secret|api[_-]?key)\s*[:=]/i.test(gateway), false);
+  assert.doesNotMatch(gateway, /href="\/dashboard/);
+});
+
+test('Authenticated template keeps the existing design and same-origin navigation', () => {
+  assert.ok(panel.includes('href="./settings.css"'));
+  assert.ok(panel.includes('src="./settings.js"'));
+  assert.ok(panel.includes('href="/dashboard"'));
+  assert.ok(panel.includes('href="/dashboard/login?next=/settings"'));
+  assert.ok(panel.includes('href="https://chillibek.online/"'));
+  assert.doesNotMatch(source, /window\.location\.replace|localStorage|sessionStorage|credentials:\s*['"]include/);
+  assert.ok(source.includes('fetch(`/waf-api/settings${path}`'));
+  assert.ok(source.includes("credentials: 'same-origin'"));
+});
+
+test('Public Dashboard gateway points only to the authenticated backend route', () => {
+  const dashboard = read('../../dashboard/index.html');
+  assert.ok(dashboard.includes('content="0;url=https://kali.pythonanywhere.com/dashboard"'));
+  assert.ok(dashboard.includes('href="https://kali.pythonanywhere.com/dashboard"'));
+  assert.doesNotMatch(dashboard, /(?:password|secret|api[_-]?key)\s*[:=]/i);
 });

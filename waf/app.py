@@ -53,7 +53,7 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def management_security(request: Request, call_next):
-        management = request.url.path.startswith(("/waf-api/", "/dashboard"))
+        management = request.url.path == "/waf-api" or request.url.path.startswith(("/waf-api/", "/dashboard", "/settings"))
         try:
             if management:
                 # Authentication, authorization, login throttling and audit never depend on policy toggles.
@@ -68,7 +68,7 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
                     store.audit(actor, "access", {"path": "/dashboard/login", "status": 429})
                     return JSONResponse({"detail": "Too many login attempts."}, status_code=429)
                 # Authenticate before body validation, even for malformed mutation requests.
-                if request.url.path.startswith("/waf-api/"):
+                if request.url.path == "/waf-api" or request.url.path.startswith("/waf-api/"):
                     try:
                         require_dashboard_auth(request, settings)
                     except HTTPException as error:
@@ -242,7 +242,8 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
 def safe_path(path):
     """Only known route templates enter logs/counter keys; never arbitrary path data."""
     if path in {'/api/menu', '/api/menu/add', '/api/staff/login', '/api/orders', '/api/orders/archive',
-                '/dashboard', '/dashboard/login', '/dashboard/logout', '/waf-api/settings', '/waf-api/settings/reset'}:
+                '/dashboard', '/dashboard/login', '/dashboard/logout', '/settings', '/settings/',
+                '/waf-api', '/waf-api/settings', '/waf-api/settings/reset'}:
         return path
     if re.fullmatch(r'/api/(?:orders|menu/(?:edit|delete))/[0-9]+', path):
         return re.sub(r'/[0-9]+$', '/:id', path)

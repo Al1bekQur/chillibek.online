@@ -142,7 +142,13 @@ async def test_csrf_and_stale_revision_rejected(control):
     client, app, _, _ = control
     state = (await client.get('/waf-api/settings')).json()
     body = {'revision': state['revision'], 'policy': {**state['policy'], 'xss': False}}
-    for headers in [{}, {'x-csrf-token': 'forged'}, {'x-csrf-token': state['csrf_token'], 'sec-fetch-site': 'cross-site'}]:
+    for headers in [
+        {}, {'x-csrf-token': 'forged'},
+        {'x-csrf-token': state['csrf_token'], 'sec-fetch-site': 'cross-site'},
+        {'x-csrf-token': state['csrf_token'], 'sec-fetch-site': 'same-site'},
+        {'x-csrf-token': state['csrf_token'], 'origin': 'https://chillibek.online'},
+        {'x-csrf-token': state['csrf_token'], 'origin': 'null'},
+    ]:
         assert (await client.put('/waf-api/settings', json=body, headers=headers)).status_code == 403
     assert (await update(client, xss=False)).status_code == 200
     assert (await client.put('/waf-api/settings', json=body, headers={'x-csrf-token': state['csrf_token']})).status_code == 409
@@ -252,7 +258,7 @@ async def test_storage_failure_never_acknowledged_as_success(control, monkeypatc
 
 
 @pytest.mark.anyio
-async def test_public_static_page_and_assets_never_expose_fake_status(control):
+async def test_authenticated_settings_template_and_assets(control):
     client, _, _, captured = control
     redirect = await client.get('/settings')
     assert redirect.status_code == 308
@@ -264,8 +270,35 @@ async def test_public_static_page_and_assets_never_expose_fake_status(control):
         assert 'Waiting for the WAF backend' in page.text
         assert 'href="./settings.css"' in page.text
         assert 'src="./settings.js"' in page.text
+        assert 'href="/dashboard"' in page.text
+        assert 'href="https://chillibek.online/"' in page.text
+        assert page.headers['cache-control'] == 'no-store'
+        assert page.headers['x-frame-options'] == 'DENY'
     for path in ['/settings/settings.css', '/settings/settings.js']:
-        assert (await client.get(path)).status_code == 200
+        asset = await client.get(path)
+        assert asset.status_code == 200
+        assert asset.headers['cache-control'] == 'no-store'
+    assert not captured
+
+
+@pytest.mark.anyio
+async def test_settings_login_redirect_and_management_namespace(control):
+    client, _, _, captured = control
+    client.cookies.clear()
+    for path in ['/settings', '/settings/']:
+        response = await client.get(path)
+        assert response.status_code == 303
+        assert response.headers['location'] == '/dashboard/login?next=/settings'
+        assert response.headers['cache-control'] == 'no-store'
+        login = await client.get(path, follow_redirects=True)
+        assert login.status_code == 200
+        assert '<input type="hidden" name="next" value="/settings">' in login.text
+        assert 'settings.js' not in login.text
+    for path in ['/waf-api', '/waf-api/', '/waf-api/unknown']:
+        for method in ['GET', 'PUT', 'POST', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']:
+            response = await client.request(method, path)
+            assert response.status_code == 401
+            assert 'access-control-allow-origin' not in response.headers
     assert not captured
 
 

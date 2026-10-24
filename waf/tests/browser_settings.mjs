@@ -1,5 +1,5 @@
 // Optional real-browser checks using Node 24's built-in WebSocket and Chrome CDP.
-// Start the synthetic server documented in browser_fixture.py, then a dedicated
+// Start the synthetic server with python -m waf.tests.browser_wsgi_fixture, then a dedicated
 // headless Chrome with --remote-debugging-port=9222 and an isolated user-data-dir.
 // Run: node waf/tests/browser_settings.mjs
 import assert from 'node:assert/strict';
@@ -58,11 +58,12 @@ let passed = 0;
 function pass(name) { passed++; process.stdout.write(`PASS ${name}\n`); }
 try {
   await command('Page.enable'); await command('Runtime.enable'); await command('Network.enable');
+  await command('Network.clearBrowserCookies');
   await command('Page.navigate', {url: 'http://127.0.0.1:8765/settings'});
-  await waitFor(`document.getElementById('auth') && !document.getElementById('auth').hidden`);
-  assert.equal(await evaluate(`document.getElementById('protection').textContent`), 'Unknown');
-  assert.equal(await evaluate(`${switchFor('SQL Injection Protection')}.disabled`), true);
-  pass('Unauthenticated page shows Unknown and disabled controls');
+  await waitFor(`location.pathname === '/dashboard/login' && document.querySelector('input[name="password"]') !== null`);
+  assert.equal(await evaluate(`document.querySelector('input[name="next"]').value`), '/settings');
+  assert.equal(await evaluate(`document.querySelectorAll('button[role="switch"]').length`), 0);
+  pass('Unauthenticated settings redirects to Dashboard login with a safe return path');
 
   await command('Page.navigate', {url: 'http://127.0.0.1:8765/dashboard/login?next=/settings'});
   await waitFor(`document.querySelector('input[name="password"]') !== null`);

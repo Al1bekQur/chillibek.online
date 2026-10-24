@@ -13,7 +13,7 @@ from werkzeug.test import Client
 from werkzeug.wrappers import Response
 
 from waf.config import WAFSettings
-from waf.policy import Policy
+from waf.policy import Policy, PolicyStore
 from waf.wsgi import protect_wsgi
 
 
@@ -133,10 +133,17 @@ def test_restaurant_menu_order_and_staff_role_workflow(staging):
 def test_admin_auth_csrf_and_dashboard_real_events(staging):
     client, _, _, _ = staging
     assert client.get('/dashboard').status_code == 303
+    for path in ['/settings', '/settings/']:
+        response = client.get(path)
+        assert response.status_code == 303
+        assert response.headers['Location'] == '/dashboard/login?next=/settings'
     assert client.get('/dashboard/api/events').status_code == 401
     assert client.put('/waf-api/settings', json={}).status_code == 401
     assert client.post('/waf-api/settings/reset', json={}).status_code == 401
     login = admin_login(client)
+    page = client.get('/settings', base_url='https://staging.test', follow_redirects=True)
+    assert page.status_code == 200 and 'settings.js' in page.text
+    assert 'Manage live WAF' not in page.text  # WSGI serves the authenticated panel, not the Pages gateway.
     assert any('Secure' in cookie and 'HttpOnly' in cookie for cookie in login.headers.getlist('Set-Cookie'))
     policy = read(client)
     assert client.put('/waf-api/settings', base_url='https://staging.test',
@@ -276,6 +283,8 @@ CONTROL_CASES = [
     ('suspicious_headers', False, 403, 200),
     ('request_size', False, 413, 200),
     ('event_logging', False, True, False),
+    ('brute_force', False, 429, 200),
+    ('bot_detection', False, 429, 200),
 ]
 
 
@@ -293,6 +302,20 @@ def probe_control(client, settings, field):
         return client.get('/api/menu', headers={'X-HTTP-Method-Override': 'DELETE'}, **options).status_code
     if field == 'request_size':
         return client.get('/api/menu', data=b'x' * (settings.max_request_bytes + 1), **options).status_code
+    if field == 'brute_force':
+        # Seed only WAF failure counters. The successful real staff login below
+        # distinguishes optional WAF enforcement from Flask's mandatory limits.
+        store = PolicyStore(settings.policy_path)
+        keys = store.login_keys('192.0.2.20', 'synthetic-admin')
+        for _ in range(5):
+            store.login_result(keys, True)
+        return client.post('/api/staff/login', json={
+            'username': 'synthetic-admin', 'password': 'synthetic-staff-password',
+        }, **options).status_code
+    if field == 'bot_detection':
+        for index in range(settings.bot_probe_limit):
+            assert client.get(f'/synthetic-missing-{index}', **options).status_code in {404, 429}
+        return client.get('/api/menu', **options).status_code
     previous = settings.log_path.read_bytes() if settings.log_path.exists() else b''
     assert client.get('/api/menu', **options).status_code == 200
     current = settings.log_path.read_bytes() if settings.log_path.exists() else b''

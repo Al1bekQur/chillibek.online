@@ -1,5 +1,13 @@
 # PythonAnywhere Free: protect the actual restaurant API
 
+> **Current settings release, 2026-10-24:** the operator reports that the protected
+> WSGI adapter and WAF credentials are now deployed. Use
+> [`SETTINGS_DEPLOYMENT.md`](SETTINGS_DEPLOYMENT.md) for the current public gateway,
+> authenticated server-side interface, eleven controls, verified test results and
+> exact update/publication commands. The historical pre-cutover status and proposed
+> JavaScript redirect below are superseded by that guide. This development task
+> does not modify the installed WSGI configuration or production database.
+
 ## Decision and scope
 
 The user confirmed that `kali` is on **Free / Beginner**. A protected WSGI entry

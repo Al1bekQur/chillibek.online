@@ -49,19 +49,16 @@ try {
   await command('Page.enable'); await command('Runtime.enable'); await command('Network.enable');
   await command('Network.clearBrowserCookies');
   await command('Page.navigate', {url});
-  await waitFor(`document.getElementById('connection')?.textContent === 'WAF API not connected' && !document.getElementById('refresh').disabled`);
+  await waitFor(`document.getElementById('manageLive') !== null`);
   assert.equal(await evaluate('document.title'), 'CHILLIBEK WAF — Security Settings');
-  assert.equal(await evaluate(`document.getElementById('protection').textContent`), 'Unknown');
-  assert.equal(await evaluate(`document.querySelectorAll('button[role="switch"]').length`), 8);
-  assert.equal(await evaluate(`Array.from(document.querySelectorAll('button[role="switch"]')).every(button => button.disabled && button.getAttribute('aria-checked') === 'false')`), true);
-  assert.equal(await evaluate(`document.getElementById('save').disabled && document.getElementById('reset').disabled`), true);
-  assert.equal(await evaluate(`document.getElementById('notice').textContent.includes('WAF API not connected')`), true);
-  assert.equal(await evaluate(`document.querySelectorAll('.rule').length`), 6);
+  assert.equal(await evaluate('location.href'), url);
+  assert.equal(await evaluate(`document.getElementById('manageLive').href`), 'https://kali.pythonanywhere.com/settings');
+  assert.equal(await evaluate(`document.querySelectorAll('button[role="switch"]').length`), 0);
+  assert.equal(await evaluate(`document.querySelector('.notice').textContent.includes('does not read the live policy')`), true);
+  assert.equal(await evaluate(`document.querySelectorAll('.rule').length`), 11);
   assert.ok((await evaluate(`getComputedStyle(document.querySelector('.sidebar')).position`)) === 'fixed');
   assert.ok(requests.some(request => request.url === new URL('./settings.css', url).href));
-  assert.ok(requests.some(request => request.url === new URL('./settings.js', url).href));
-  await evaluate(`document.querySelector('button[role="switch"]').click(); document.getElementById('save').click(); document.getElementById('reset').click(); document.getElementById('refresh').click()`);
-  await waitFor(`!document.getElementById('refresh').disabled`);
+  assert.equal(requests.some(request => request.url.includes('/waf-api/') || request.url.endsWith('/settings.js')), false);
   assert.equal(requests.some(request => !['GET', 'HEAD'].includes(request.method)), false);
   assert.equal(requests.some(request => request.url.includes('pythonanywhere')), false);
   await command('Emulation.setDeviceMetricsOverride', {width: 390, height: 844, deviceScaleFactor: 1, mobile: true});
@@ -70,7 +67,7 @@ try {
   const picture = await command('Page.captureScreenshot', {format: 'png', captureBeyondViewport: true});
   await writeFile('waf/local/settings-static-public.png', Buffer.from(picture.data, 'base64'));
   assert.deepEqual(errors, []);
-  process.stdout.write(`PASS static Settings page at ${url}\nPASS relative assets load; all 8 switches and Save/Reset stay disabled\nPASS honest disconnected state; Refresh works; no mutation or PythonAnywhere requests\nPASS mobile layout; no uncaught JavaScript exceptions\n`);
+  process.stdout.write(`PASS static Settings page stays at ${url}\nPASS prominent management action, Dashboard links and all 11 control descriptions\nPASS no API client, mutation or PythonAnywhere requests\nPASS mobile layout; no uncaught JavaScript exceptions\n`);
 } finally {
   await command('Browser.close').catch(() => {});
   socket.close();
