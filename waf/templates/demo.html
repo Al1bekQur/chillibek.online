@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>CHILLIBEK WAF — Login Abuse Demo</title>
+  <link rel="stylesheet" href="/settings/settings.css">
+  <script src="/settings/demo.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/dashboard"><span class="brand-icon" aria-hidden="true">C</span><span>CHILLIBEK <b>WAF</b><small>SECURITY OPERATIONS</small></span></a>
+    <div class="nav-label">WORKSPACE</div>
+    <nav aria-label="Security navigation">
+      <a href="/dashboard"><span aria-hidden="true">▦</span> Overview <span class="arrow">↗</span></a>
+      <a href="/settings"><span aria-hidden="true">⚙</span> Security Settings</a>
+      <a href="/settings/demo" aria-current="page"><span aria-hidden="true">▶</span> Login Abuse Demo</a>
+      <a href="https://chillibek.online/"><span aria-hidden="true">⌂</span> Restaurant <span class="arrow">↗</span></a>
+    </nav>
+    <div class="sidebar-note"><span class="tiny-dot"></span> ISOLATED TEST ACCOUNT<p>Demo login counters and blocks use a separate WAF policy database. No restaurant staff or order data is accessed.</p></div>
+    <div class="sidebar-footer">CHILLIBEK / CONTROL PLANE</div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div><span class="muted">Workspace</span><span class="slash">/</span>Login Abuse Demo</div><a href="/settings">Back to Settings ↗</a></header>
+    <main>
+      <div class="page-heading"><div><div class="eyebrow">CONTROLLED DEMONSTRATION</div><h1>Login Abuse Demo<span>.</span></h1><p>Submit bounded requests to an operator-only synthetic authentication endpoint.</p></div><span class="environment">DEMO ONLY · NO STAFF DATABASE</span></div>
+      <div class="notice" id="notice" role="status" aria-live="polite">Loading isolated demo policy…</div>
+      <section class="status-grid" aria-label="Demo policy">
+        <article class="status-card"><div class="card-label">DEMO LOGIN ABUSE</div><div id="state" class="status-value unknown">Unknown</div><p id="policySummary">Waiting for the WAF backend</p></article>
+        <article class="status-card"><div class="card-label">SYNTHETIC ACCOUNT</div><div id="account" class="status-value date">demo_waiter</div><p>Valid demo-only password: <code id="demoPassword"></code></p></article>
+        <article class="status-card"><div class="card-label">LATEST RESPONSE</div><div id="lastStatus" class="status-value unknown">—</div><p id="lastMessage">No synthetic requests sent</p></article>
+      </section>
+      <section class="panel" aria-labelledby="policy-title">
+        <div class="panel-heading"><div><h2 id="policy-title">Isolated login policy</h2><p>Only demo_waiter is accepted. OFF affects only this demo account; password verification remains enabled.</p></div><span class="tag">SEPARATE PERSISTENT STORE</span></div>
+        <form id="policyForm" class="block-form">
+          <label>Failed attempts before lock<input id="threshold" type="number" min="1" max="20" step="1" value="5" required></label>
+          <label>Lockout duration (seconds)<input id="lockout" type="number" min="30" max="3600" step="1" value="60" required></label>
+          <button id="savePolicy" class="button primary" type="submit">Save demo policy</button>
+        </form>
+        <div class="actions">
+          <div><span class="tiny-dot"></span> <span>Demo WAF control: <strong id="enabledLabel">OFF</strong></span></div>
+          <div class="action-buttons">
+            <button id="turnOff" type="button" class="button danger">WAF OFF</button>
+            <button id="turnOn" type="button" class="button primary">WAF ON</button>
+          </div>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="attempt-title">
+        <div class="panel-heading"><div><h2 id="attempt-title">Synthetic HTTP login attempts</h2><p>Run one attempt or a capped batch of 20. The batch stops at the first 429.</p></div><span class="tag">REAL POLICY ENGINE</span></div>
+        <form id="attemptForm" class="block-form">
+          <label>Username<input id="username" value="demo_waiter" readonly></label>
+          <label>Password<input id="password" type="password" value="incorrect-synthetic-password" autocomplete="off" required></label>
+          <button id="sendOne" type="submit" class="button">Send one attempt</button>
+          <button id="sendTwenty" type="button" class="button danger">Run up to 20 attempts</button>
+        </form>
+        <div id="activeBlock" class="block-list" aria-live="polite"></div>
+        <div id="attemptResults" class="block-list" aria-live="polite"></div>
+      </section>
+      <section class="panel" aria-labelledby="history-title">
+        <div class="panel-heading"><div><h2 id="history-title">Demo block audit</h2><p>Automatic blocks, expiry and operator unblocks are recorded separately from staff activity.</p></div></div>
+        <div id="history" class="block-list"></div>
+      </section>
+      <footer>CHILLIBEK WAF <span>Operator authentication and CSRF remain mandatory.</span></footer>
+    </main>
+  </div>
+</body>
+</html>

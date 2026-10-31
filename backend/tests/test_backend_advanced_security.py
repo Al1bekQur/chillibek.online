@@ -3,20 +3,18 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import select
 
-from backend.login_guard import admit, keys
-from backend.db import create_db_engine, create_schema, login_attempts
+
+from backend.login_guard import admit, failure
+from waf.policy import Policy, PolicyStore
 from test_security import app, client, add_staff, login, auth, add_order
 
 
 def test_persistent_distributed_login_limits_without_waf(app, monkeypatch):
     clock = SimpleNamespace(time=lambda:1800000000)
-    monkeypatch.setattr('backend.login_guard.time', clock)
-    # server may have been imported using the legacy module name by other tests.
-    import sys
-    if 'login_guard' in sys.modules:
-        monkeypatch.setattr(sys.modules['login_guard'], 'time', clock)
+    monkeypatch.setattr('waf.policy.time', clock)
+    store = app.config['SECURITY_POLICY_STORE']
+    policy = Policy()
     for index in range(5):
         client = app.test_client()
         response = client.post('/api/staff/login', json={'username':'synthetic-target','password':'never-log-this'},
@@ -26,17 +24,20 @@ def test_persistent_distributed_login_limits_without_waf(app, monkeypatch):
     response = client.post('/api/staff/login', json={'username':'synthetic-target','password':'never-log-this'},
                            environ_overrides={'REMOTE_ADDR':'192.0.2.20'})
     assert response.status_code == 429 and int(response.headers['Retry-After']) > 0
-    # A fresh engine reads the same durable account state.
-    restarted = create_db_engine(app.config['DATABASE_URL'])
-    assert admit(restarted, keys('192.0.2.21', 'synthetic-target')) > 0
+    # A new store instance reads the same durable login-block state.
+    restarted = PolicyStore(store.path)
+    assert admit(restarted, '192.0.2.21', 'synthetic-target', policy) > 0
     clock.time = lambda:1800000031
-    for i in range(5):
-        assert admit(restarted, keys(f'198.51.100.{i}', 'synthetic-target')) == 0
-    assert admit(restarted, keys('198.51.100.20', 'synthetic-target')) == 60
+    assert admit(restarted, '198.51.100.1', 'synthetic-target', policy) == 0
+    results = [
+        failure(restarted, '198.51.100.1', 'synthetic-target', policy)
+        for _ in range(policy.login_max_attempts)
+    ]
+    assert results == [False] * (policy.login_max_attempts - 1) + [True]
+    assert admit(restarted, '198.51.100.2', 'synthetic-target', policy) == 61
     with restarted.connect() as connection:
-        rows = connection.execute(select(login_attempts)).all()
+        rows = connection.execute('SELECT identity, attempts FROM login_counters').fetchall()
         assert 'synthetic-target' not in str(rows) and 'never-log-this' not in str(rows)
-    restarted.dispose()
 
 
 @pytest.mark.parametrize('url', ['http://127.0.0.1/a', 'http://[::1]/a', 'http://169.254.169.254/a',

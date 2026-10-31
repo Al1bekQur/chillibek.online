@@ -15,6 +15,7 @@
     <nav aria-label="Security navigation">
       <a href="/dashboard"><span aria-hidden="true">▦</span> Overview <span class="arrow">↗</span></a>
       <a href="./" aria-current="page"><span aria-hidden="true">⚙</span> Security Settings</a>
+      <a href="/settings/demo"><span aria-hidden="true">▶</span> Login Abuse Demo</a>
       <a href="https://chillibek.online/"><span aria-hidden="true">⌂</span> Restaurant <span class="arrow">↗</span></a>
     </nav>
     <div class="sidebar-note"><span class="tiny-dot"></span> ALWAYS ENFORCED<p>Authentication, authorization, CSRF, protocol safety and configuration auditing remain active in every mode.</p></div>
@@ -32,14 +33,31 @@
       <div class="notice" id="notice" role="status" aria-live="polite">Reading the current server policy…</div>
       <div id="auth" class="auth" hidden><p>Sign in with your WAF operator account to manage protection.</p><a class="button primary" href="/dashboard/login?next=/settings">Sign in to WAF ↗</a></div>
       <section class="panel master-panel" aria-labelledby="master-title">
-        <div class="section-icon" aria-hidden="true">◈</div><div class="master-copy"><div class="eyebrow">FIREWALL MODE</div><h2 id="master-title">Master WAF</h2><p>Block rejects requests that match enabled protections. Monitor forwards them and records detections when event logging is on.</p></div>
+        <div class="section-icon" aria-hidden="true">◈</div><div class="master-copy"><div class="eyebrow">FIREWALL MODE</div><h2 id="master-title">Master WAF</h2><p>Block enforces enabled rules. Monitor records detections without optional blocks. Disabled is available only in an isolated test deployment; authentication and authorization remain mandatory.</p></div>
         <div class="control"><span id="modeState" class="state unknown">Unknown</span><button id="mode" type="button" class="switch" role="switch" aria-label="Master WAF Block mode" aria-checked="false" disabled><span></span></button><small>Monitor / Block</small></div>
       </section>
       <section class="panel modules" aria-labelledby="modules-title">
         <div class="panel-heading"><div><h2 id="modules-title">Protection modules</h2><p>Changes apply immediately after the server confirms them.</p></div><span class="tag">LIVE POLICY</span></div>
         <div id="rules"></div>
       </section>
+      <section class="panel" aria-labelledby="thresholds-title">
+        <div class="panel-heading"><div><h2 id="thresholds-title">Shared rate and login policy</h2><p>These validated values are read by both the WAF and Flask application.</p></div><span class="tag">PERSISTENT POLICY</span></div>
+        <div id="policyFields" class="policy-fields"></div>
+      </section>
       <section class="panel logging" aria-labelledby="logging-title"><div><div class="eyebrow">OBSERVABILITY</div><h2 id="logging-title">Security Event Logging</h2><p>Record request decisions, matched rules, and risk scores in the Dashboard. Configuration audit logging always stays enabled.</p></div><div id="loggingControl"></div></section>
+      <section class="panel" aria-labelledby="blocks-title">
+        <div class="panel-heading"><div><h2 id="blocks-title">Active Blocks</h2><p>IP blocks apply at the WAF; account blocks apply to staff authentication. Blocks remain stored but are suspended outside Block mode.</p></div><span id="blockCount" class="tag">0 ENFORCED · 0 SUSPENDED</span></div>
+        <form id="blockForm" class="block-form">
+          <label>Block type<select id="blockKind"><option value="ip">IP address</option><option value="account">Staff account</option></select></label>
+          <label>IP or account<input id="blockValue" maxlength="80" required autocomplete="off"></label>
+          <label>Duration (seconds)<input id="blockDuration" type="number" min="60" max="604800" step="1" value="3600" required></label>
+          <label>Reason<input id="blockReason" maxlength="200" value="Manual operator block" required></label>
+          <button id="createBlock" class="button danger" type="submit">Block</button>
+        </form>
+        <div id="blocks" class="block-list" aria-live="polite"></div>
+        <div class="panel-heading history-heading"><div><h2>Recent block audit</h2><p>Block, expiration, and unblock actions are retained in the configuration audit log.</p></div></div>
+        <div id="blockHistory" class="block-list"></div>
+      </section>
       <div class="actions"><div><span class="tiny-dot"></span> <span id="saveHint">A live connection is required to change settings.</span></div><div class="action-buttons"><button id="refresh" class="button">Refresh</button><button id="reset" class="button danger" disabled>Reset to Defaults</button><button id="save" class="button primary" disabled>Save Settings</button></div></div>
       <footer>CHILLIBEK WAF <span>Policy changes persist across service restarts.</span></footer>
       <noscript><p class="notice">JavaScript is required to read and update the live WAF policy.</p></noscript>

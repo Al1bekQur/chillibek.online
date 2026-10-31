@@ -41,6 +41,7 @@ def staging(tmp_path, monkeypatch):
                                ('synthetic-' + role, generate_password_hash('synthetic-staff-password'), role))
     settings = WAFSettings(
         policy_path=tmp_path / 'policy.sqlite3', log_path=tmp_path / 'events.log',
+        allow_disabled_mode=True,
         dashboard_username='waf-operator',
         dashboard_password_hash=generate_password_hash('synthetic-waf-password'),
         dashboard_session_secret='synthetic-waf-session-secret-at-least-32-characters',
@@ -189,7 +190,7 @@ def test_size_header_and_monitor_controls(staging):
 def test_logging_off_cannot_disable_audit_or_staff_auth(staging):
     client, _, settings, _ = staging
     admin_login(client)
-    assert update(client, event_logging=False, mode='monitor').status_code == 200
+    assert update(client, event_logging=False, mode='block').status_code == 200
     assert client.get('/api/menu').status_code == 200
     assert client.get('/api/orders').status_code == 401
     assert not settings.log_path.exists()
@@ -266,6 +267,192 @@ def test_flask_staff_login_limits_keep_distinct_real_clients(staging):
     assert client.post('/api/staff/login', json={**payload, 'username':'synthetic-another'}, headers={**first, 'X-Real-IP': '192.0.2.12'}).status_code == 401
 
 
+def test_configurable_account_lockout_progression_and_expiration(staging, monkeypatch):
+    client, wrapper, _, _ = staging
+    admin_login(client)
+    assert update(client, login_max_attempts=2, login_ip_max_attempts=100,
+                  login_initial_lockout_seconds=5, login_lockout_multiplier=2,
+                  login_max_lockout_seconds=30).status_code == 200
+    clock = __import__('waf.policy', fromlist=['time']).time
+    base_time = clock.time()
+    attempts = {'username': 'synthetic-admin', 'password': 'incorrect-synthetic-password'}
+    first_ip = {'environ_overrides': {'REMOTE_ADDR': '198.51.100.10'}}
+    other_ip = {'environ_overrides': {'REMOTE_ADDR': '198.51.100.11'}}
+    assert client.post('/api/staff/login', json=attempts, **first_ip).status_code == 401
+    assert client.post('/api/staff/login', json=attempts, **first_ip).status_code == 401
+    blocked = client.post('/api/staff/login', json=attempts, **other_ip)
+    assert blocked.status_code == 429 and blocked.headers['Retry-After'] == '6'
+    account_block = next(block for block in read(client)['blocks'] if block['kind'] == 'account')
+    assert account_block['identifier'] == 's***'
+    assert account_block['reason'] == 'Repeated failed staff login'
+    assert account_block['rule_id'] == 'AUTH-001' and account_block['attempts'] == 2
+    assert account_block['manual'] is False
+    assert 0 < account_block['remaining_seconds'] <= 5
+
+    monkeypatch.setattr(clock, 'time', lambda: base_time + 6)
+    assert client.post('/api/staff/login', json=attempts, **other_ip).status_code == 401
+    assert client.post('/api/staff/login', json=attempts, **first_ip).status_code == 401
+    progressive = client.post('/api/staff/login', json=attempts, **first_ip)
+    assert progressive.status_code == 429 and progressive.headers['Retry-After'] == '11'
+    monkeypatch.setattr(clock, 'time', lambda: base_time + 17)
+    assert client.post('/api/staff/login', json={
+        'username': 'synthetic-admin', 'password': 'synthetic-staff-password',
+    }, **other_ip).status_code == 200
+    assert not [block for block in read(client)['blocks'] if block['kind'] == 'account']
+    assert wrapper.waf.state.policy_store.block_history()
+
+
+def test_ip_threshold_monitor_and_disabled_login_modes(staging):
+    client, wrapper, settings, _ = staging
+    admin_login(client)
+    assert update(client, login_max_attempts=100, login_ip_max_attempts=2).status_code == 200
+    bad = {'username': 'synthetic-unknown', 'password': 'incorrect-synthetic-password'}
+    same_ip = {'environ_overrides': {'REMOTE_ADDR': '198.51.100.20'}}
+    assert client.post('/api/staff/login', json=bad, **same_ip).status_code == 401
+    assert client.post('/api/staff/login', json={**bad, 'username': 'synthetic-other'}, **same_ip).status_code == 401
+    ip_block = next(block for block in read(client)['blocks'] if block['kind'] == 'ip')
+    assert ip_block['attempts'] == 2 and ip_block['rule_id'] == 'AUTH-001'
+    throttled = client.get('/api/menu', environ_overrides={'REMOTE_ADDR': '198.51.100.20'})
+    assert throttled.status_code == 429 and int(throttled.headers['Retry-After']) > 0
+
+    assert update(client, mode='monitor').status_code == 200
+    assert client.get('/api/menu', environ_overrides={'REMOTE_ADDR': '198.51.100.20'}).status_code == 200
+    suspended = next(block for block in read(client)['blocks'] if block['kind'] == 'ip')
+    assert suspended['enforced'] is False
+    for _ in range(3):
+        assert client.post('/api/staff/login', json=bad, **same_ip).status_code == 401
+    assert not [block for block in read(client)['blocks'] if block['kind'] == 'account']
+    assert any(block['kind'] == 'ip' for block in read(client)['blocks'])
+    events = [json.loads(line) for line in settings.log_path.read_text().splitlines()]
+    assert any('BRUTE-FAIL-001' in event['matched_rules'] for event in events)
+
+    assert update(client, mode='disabled').status_code == 200
+    assert not any(block['enforced'] for block in read(client)['blocks'])
+    protected_payload = {'username': 'synthetic-admin', 'password': 'incorrect-synthetic-password'}
+    assert [client.post('/api/staff/login', json=protected_payload, **same_ip).status_code
+            for _ in range(12)] == [401] * 12
+    assert client.post('/api/staff/login', json={
+        'username': 'synthetic-admin', 'password': 'synthetic-staff-password',
+    }, **same_ip).status_code == 200
+    assert client.get('/api/menu', query_string={'q': "' OR 1=1 --"},
+                      environ_overrides={'REMOTE_ADDR': '198.51.100.21'}).status_code == 200
+    anonymous = StagingClient(wrapper, Response)
+    assert anonymous.put('/waf-api/settings', json={}).status_code == 401
+
+
+def test_wsgi_operator_demo_isolated_from_restaurant_identity_and_orders(staging):
+    client, wrapper, settings, restaurant = staging
+    admin_login(client)
+    state = client.get('/waf-api/demo', base_url='https://staging.test').json
+    assert wrapper.waf.state.demo_policy_store.path != settings.policy_path
+    headers = {'X-CSRF-Token': state['csrf_token']}
+    enabled = client.put('/waf-api/demo', base_url='https://staging.test', headers=headers, json={
+        'revision': state['revision'], 'enabled': True, 'threshold': 2, 'lockout_seconds': 30,
+    })
+    assert enabled.status_code == 200
+    bad = {'username': 'demo_waiter', 'password': 'synthetic-wrong-password'}
+    assert client.post('/waf-api/demo/login', base_url='https://staging.test',
+                       headers={'X-CSRF-Token': enabled.json['csrf_token']}, json=bad).status_code == 401
+    blocked = client.post('/waf-api/demo/login', base_url='https://staging.test',
+                          headers={'X-CSRF-Token': enabled.json['csrf_token']}, json=bad)
+    assert blocked.status_code == 429
+    block_state = client.get('/waf-api/demo', base_url='https://staging.test').json
+    assert block_state['blocks'][0]['enforced'] is True
+    released = client.delete(
+        f"/waf-api/demo/blocks/{block_state['blocks'][0]['id']}",
+        base_url='https://staging.test', headers={'X-CSRF-Token': block_state['csrf_token']},
+    )
+    assert released.status_code == 200
+
+    off = client.put('/waf-api/demo', base_url='https://staging.test',
+                     headers={'X-CSRF-Token': released.json['csrf_token']}, json={
+        'revision': released.json['revision'], 'enabled': False, 'threshold': 2, 'lockout_seconds': 30,
+    })
+    assert off.status_code == 200
+    responses = [client.post('/waf-api/demo/login', base_url='https://staging.test',
+                             headers={'X-CSRF-Token': off.json['csrf_token']}, json=bad).status_code
+                 for _ in range(20)]
+    assert responses == [401] * 20
+    assert wrapper.waf.state.policy_store.read()['policy'] == Policy().model_dump()
+    from sqlalchemy import text
+    with restaurant.app_context():
+        with restaurant.config['DB_ENGINE'].connect() as connection:
+            assert connection.execute(text("SELECT COUNT(*) FROM staff WHERE username='demo_waiter'")).scalar_one() == 0
+            assert connection.execute(text('SELECT COUNT(*) FROM orders')).scalar_one() == 0
+
+
+def test_production_keeps_login_guard_mandatory_but_accepts_safe_thresholds(staging):
+    _, _, settings, restaurant = staging
+    production = StagingClient(protect_wsgi(restaurant, replace(settings, allow_disabled_mode=False)), Response)
+    admin_login(production)
+    assert update(production, login_max_attempts=2, login_ip_max_attempts=10).status_code == 200
+    assert update(production, mode='disabled').status_code == 422
+    assert update(production, brute_force=False).status_code == 422
+    assert read(production)['capabilities']['production_login_guard_required'] is True
+    assert read(production)['policy']['brute_force'] is True
+
+
+def test_manual_block_enforcement_unblock_and_expiration(staging, monkeypatch):
+    client, wrapper, settings, _ = staging
+    admin_login(client)
+    clock = __import__('waf.policy', fromlist=['time']).time
+    base_time = clock.time()
+    state = read(client)
+    headers = {'X-CSRF-Token': state['csrf_token']}
+    ip = '198.51.100.30'
+    response = client.post('/waf-api/blocks', base_url='https://staging.test', headers=headers, json={
+        'kind': 'ip', 'value': ip, 'duration_seconds': 60, 'reason': 'synthetic incident',
+    })
+    assert response.status_code == 200
+    block = next(block for block in response.json['blocks'] if block['kind'] == 'ip')
+    assert block['manual'] is True and block['rule_id'] == 'MANUAL-001' and block['enforced'] is True
+    assert block['reason'] == 'synthetic incident' and block['remaining_seconds'] == 60
+    assert update(client, mode='monitor').status_code == 200
+    assert client.get('/api/menu', environ_overrides={'REMOTE_ADDR': ip}).status_code == 200
+    assert update(client, mode='block').status_code == 200
+    assert client.get('/api/menu', environ_overrides={'REMOTE_ADDR': ip}).status_code == 403
+    assert client.delete(f"/waf-api/blocks/{block['id']}", base_url='https://staging.test').status_code == 403
+    removed = client.delete(f"/waf-api/blocks/{block['id']}", base_url='https://staging.test',
+                            headers={'X-CSRF-Token': response.json['csrf_token']})
+    assert removed.status_code == 200
+    assert client.get('/api/menu', environ_overrides={'REMOTE_ADDR': ip}).status_code == 200
+    assert any(item['action'] == 'security_unblock' for item in removed.json['block_history'])
+
+    state = read(client)
+    expired = client.post('/waf-api/blocks', base_url='https://staging.test',
+                          headers={'X-CSRF-Token': state['csrf_token']}, json={
+        'kind': 'ip', 'value': ip, 'duration_seconds': 60, 'reason': 'synthetic expiry',
+    })
+    assert expired.status_code == 200
+    monkeypatch.setattr(clock, 'time', lambda: base_time + 61)
+    assert client.get('/api/menu', environ_overrides={'REMOTE_ADDR': ip}).status_code == 200
+    history = read(client)['block_history']
+    assert any(item['action'] == 'security_block_expired' for item in history)
+
+    manual_account = client.post('/waf-api/blocks', base_url='https://staging.test',
+                                 headers={'X-CSRF-Token': read(client)['csrf_token']}, json={
+        'kind': 'account', 'value': 'synthetic-admin', 'duration_seconds': 60,
+        'reason': 'synthetic account hold',
+    })
+    assert manual_account.status_code == 200
+    assert next(block for block in manual_account.json['blocks'] if block['kind'] == 'account')['identifier'] == 's***'
+    login = client.post('/api/staff/login', json={
+        'username': 'synthetic-admin', 'password': 'synthetic-staff-password',
+    }, environ_overrides={'REMOTE_ADDR': '198.51.100.31'})
+    assert login.status_code == 429
+    assert client.get('/api/menu').status_code == 200
+    account_block = next(block for block in manual_account.json['blocks'] if block['kind'] == 'account')
+    removed_account = client.delete(
+        f"/waf-api/blocks/{account_block['id']}", base_url='https://staging.test',
+        headers={'X-CSRF-Token': manual_account.json['csrf_token']},
+    )
+    assert removed_account.status_code == 200
+    assert client.post('/api/staff/login', json={
+        'username': 'synthetic-admin', 'password': 'synthetic-staff-password',
+    }, environ_overrides={'REMOTE_ADDR': '198.51.100.31'}).status_code == 200
+    assert wrapper.waf.state.policy_store.block_history()
+
+
 def test_disabled_proxy_rate_limit_cannot_disable_operator_login_throttle(staging):
     client, wrapper, _, _ = staging
     wrapper.waf.state.policy_store.update(Policy(rate_limiting=False, mode='monitor'), 0, 'synthetic-operator')
@@ -303,17 +490,16 @@ def probe_control(client, settings, field):
     if field == 'request_size':
         return client.get('/api/menu', data=b'x' * (settings.max_request_bytes + 1), **options).status_code
     if field == 'brute_force':
-        # Seed only WAF failure counters. The successful real staff login below
-        # distinguishes optional WAF enforcement from Flask's mandatory limits.
+        # A previous automatic lock is enforced only while login protection is enabled.
         store = PolicyStore(settings.policy_path)
-        keys = store.login_keys('192.0.2.20', 'synthetic-admin')
-        for _ in range(5):
-            store.login_result(keys, True)
+        policy = Policy()
+        for index in range(5):
+            store.record_login_failure(f'192.0.2.{index + 1}', 'synthetic-admin', policy)
         return client.post('/api/staff/login', json={
             'username': 'synthetic-admin', 'password': 'synthetic-staff-password',
         }, **options).status_code
     if field == 'bot_detection':
-        for index in range(settings.bot_probe_limit):
+        for index in range(Policy().bot_detection_limit):
             assert client.get(f'/synthetic-missing-{index}', **options).status_code in {404, 429}
         return client.get('/api/menu', **options).status_code
     previous = settings.log_path.read_bytes() if settings.log_path.exists() else b''

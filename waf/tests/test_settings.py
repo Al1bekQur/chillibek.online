@@ -32,6 +32,7 @@ async def control(tmp_path, monkeypatch):
         log_path=tmp_path / 'events.log', policy_path=tmp_path / 'policy.sqlite3',
         upstream_base_url='https://synthetic.test', upstream_transport=httpx.ASGITransport(app=upstream),
         max_request_bytes=256, rate_limit_requests=1000,
+        allow_disabled_mode=True,
         dashboard_username='operator', dashboard_password_hash=generate_password_hash('synthetic-password'),
         dashboard_session_secret='synthetic-session-secret-at-least-32-characters',
     )
@@ -53,6 +54,23 @@ async def update(client, **changes):
     return await client.put('/waf-api/settings', json={
         'revision': snapshot['revision'], 'policy': {**snapshot['policy'], **changes},
     }, headers={'x-csrf-token': snapshot['csrf_token']})
+
+
+@pytest.mark.anyio
+async def test_settings_reports_effective_limits_after_deployment_caps(control):
+    client, _, _, _ = control
+    response = await update(
+        client, rate_limit_requests=1500, route_limit_requests=100,
+        request_size_bytes=2048,
+    )
+    assert response.status_code == 200
+    effective = response.json()['effective']
+    assert effective['rate_limit_requests'] == 1000
+    assert effective['rate_limit_window_seconds'] == 60
+    assert effective['route_limit_requests'] == 90
+    assert effective['route_limit_window_seconds'] == 60
+    assert effective['request_size_bytes'] == 256
+    assert effective['hard_request_size_bytes'] == 4 * 1024 * 1024
 
 
 @pytest.mark.anyio
@@ -97,6 +115,7 @@ async def test_persist_restart_and_other_worker_reload(control):
 @pytest.mark.anyio
 @pytest.mark.parametrize('changes', [
     {'sql_injection': 'false'}, {'xss': 0}, {'mode': 'off'}, {'extra_rule': True},
+    {'login_initial_lockout_seconds': 3600, 'login_max_lockout_seconds': 30},
 ])
 async def test_invalid_settings_rejected(control, changes):
     client, app, _, _ = control
@@ -153,6 +172,78 @@ async def test_csrf_and_stale_revision_rejected(control):
     assert (await update(client, xss=False)).status_code == 200
     assert (await client.put('/waf-api/settings', json=body, headers={'x-csrf-token': state['csrf_token']})).status_code == 409
     assert app.state.policy_store.read()['revision'] == 1
+
+
+@pytest.mark.anyio
+async def test_operator_only_demo_uses_separate_persistent_login_policy(control):
+    client, app, settings, captured = control
+    page = await client.get('/settings/demo')
+    assert page.status_code == 200 and 'demo.js' in page.text
+    state = (await client.get('/waf-api/demo')).json()
+    demo_store = app.state.demo_policy_store
+    assert demo_store.path != app.state.policy_store.path
+    assert state['enabled'] is False
+    assert state['demo_account']['username'] == 'demo_waiter'
+    assert (await client.post('/waf-api/demo/login', json={
+        'username': 'demo_waiter', 'password': 'incorrect-synthetic-password',
+    })).status_code == 403
+    headers = {'x-csrf-token': state['csrf_token']}
+    assert (await client.put('/waf-api/demo', json={
+        'revision': state['revision'], 'enabled': True, 'threshold': 3, 'lockout_seconds': 30,
+    }, headers=headers)).status_code == 200
+
+    bad = {'username': 'demo_waiter', 'password': 'incorrect-synthetic-password'}
+    assert [(await client.post('/waf-api/demo/login', json=bad, headers=headers)).status_code
+            for _ in range(2)] == [401, 401]
+    blocked = await client.post('/waf-api/demo/login', json=bad, headers=headers)
+    assert blocked.status_code == 429 and blocked.headers['retry-after'] == '31'
+    active = (await client.get('/waf-api/demo')).json()
+    assert active['enabled'] is True
+    assert active['blocks'][0]['identifier'] == 'd***'
+    assert active['blocks'][0]['attempts'] == 3 and active['blocks'][0]['enforced'] is True
+    assert any(item['action'] == 'security_block' for item in active['block_history'])
+
+    restarted = create_app(settings)
+    persisted = restarted.state.demo_policy_store.read()
+    assert persisted['policy']['mode'] == 'block'
+    assert persisted['policy']['login_max_attempts'] == 3
+    assert persisted['policy']['login_initial_lockout_seconds'] == 30
+
+    unblocked = await client.delete(
+        f"/waf-api/demo/blocks/{active['blocks'][0]['id']}",
+        headers={'x-csrf-token': active['csrf_token']},
+    )
+    assert unblocked.status_code == 200 and not unblocked.json()['blocks']
+    assert (await client.post('/waf-api/demo/login', json=bad, headers={
+        'x-csrf-token': unblocked.json()['csrf_token'],
+    })).status_code == 401
+
+    off = await client.put('/waf-api/demo', json={
+        'revision': unblocked.json()['revision'], 'enabled': False,
+        'threshold': 3, 'lockout_seconds': 30,
+    }, headers={'x-csrf-token': unblocked.json()['csrf_token']})
+    assert off.status_code == 200
+    responses = []
+    for _ in range(20):
+        response = await client.post('/waf-api/demo/login', json=bad,
+                                     headers={'x-csrf-token': off.json()['csrf_token']})
+        responses.append(response.status_code)
+    assert responses == [401] * 20
+    valid = await client.post('/waf-api/demo/login', json={
+        'username': 'demo_waiter', 'password': off.json()['demo_account']['password'],
+    }, headers={'x-csrf-token': off.json()['csrf_token']})
+    assert valid.status_code == 200 and valid.json()['demo'] is True
+    assert app.state.policy_store.read()['policy'] == Policy().model_dump()
+    assert not captured
+
+    anonymous = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url='https://waf.test',
+    )
+    try:
+        assert (await anonymous.get('/waf-api/demo')).status_code == 401
+        assert (await anonymous.get('/settings/demo')).status_code == 303
+    finally:
+        await anonymous.aclose()
 
 
 @pytest.mark.anyio
@@ -217,7 +308,7 @@ async def test_rate_limit_toggle_shared_counter_and_monitor(control, monkeypatch
 @pytest.mark.anyio
 async def test_event_logging_off_preserves_audit_auth_and_dashboard(control):
     client, app, settings, _ = control
-    assert (await update(client, event_logging=False, mode='monitor', **{name: False for name in (
+    assert (await update(client, event_logging=False, mode='block', **{name: False for name in (
         'sql_injection', 'xss', 'path_traversal', 'rate_limiting', 'suspicious_headers', 'request_size',
         'command_injection', 'brute_force', 'bot_detection',
     )})).status_code == 200
@@ -226,7 +317,7 @@ async def test_event_logging_off_preserves_audit_auth_and_dashboard(control):
     assert (await client.get('/dashboard')).status_code == 200
     rules = (await client.get('/dashboard/api/rules')).json()
     assert all(not rule['enabled'] for rule in rules['rules'])
-    assert rules['mode'] == 'monitor'
+    assert rules['mode'] == 'block'
     state = (await client.get('/waf-api/settings')).json()
     reset = await client.post('/waf-api/settings/reset', json={'revision': state['revision']}, headers={'x-csrf-token': state['csrf_token']})
     assert reset.status_code == 200

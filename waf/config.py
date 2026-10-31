@@ -22,6 +22,7 @@ class WAFSettings:
     dashboard_log_read_limit: int = 5000
     policy_path: Path | None = Path(os.environ["WAF_POLICY_PATH"]) if os.getenv("WAF_POLICY_PATH") else None
     dashboard_secure_cookies: bool = os.getenv("WAF_SECURE_COOKIES", "true").lower() == "true"
+    allow_disabled_mode: bool = False
     rate_limit_requests: int = 120
     rate_limit_window_seconds: int = 60
     route_limit_requests: int = 90
@@ -32,4 +33,3 @@ class WAFSettings:
     hard_max_request_bytes: int = 4 * 1024 * 1024
     max_header_count: int = 80
     max_header_bytes: int = 16384
-    bot_probe_limit: int = 12

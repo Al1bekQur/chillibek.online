@@ -15,11 +15,11 @@ import click
 from dotenv import load_dotenv
 from flask import Flask, abort, current_app, g, jsonify, request
 from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
+
+from waf.policy import Policy, PolicyStore
 
 try:
     from . import login_guard
@@ -49,7 +49,6 @@ CATEGORIES = {"breakfasts", "salads", "soups", "main", "pizza", "snacks", "drink
 ROLES = {"admin", "waiter", "chef"}
 ORDER_STATUSES = {"pending", "cooking", "ready", "completed"}
 MENU_FIELDS = {"category", "name", "description", "weight", "price", "image_url"}
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 MENU_SEED = [
     ("breakfasts", "Сырники с ягодами", "Нежные сырники из фермерского творога со сметаной и свежими ягодами.", "220г", 2100, "https://images.unsplash.com/photo-1590137876181-2a5a7e340308?w=500&q=80"),
@@ -196,6 +195,10 @@ def create_app(test_config=None):
         SECRET_KEY=secret_key,
         DATABASE_URL=database_url,
         DATABASE_PATH=database_path,
+        SECURITY_POLICY_PATH=os.getenv("WAF_POLICY_PATH"),
+        SECURITY_POLICY_STORE=None,
+        SECURITY_POLICY_ENFORCED_BY_WAF=False,
+        SECURITY_ALLOW_DISABLED_MODE=False,
         TOKEN_MAX_AGE=8 * 60 * 60,
         MAX_CONTENT_LENGTH=1 * 1024 * 1024,
         RATELIMIT_STORAGE_URI=os.getenv("RATELIMIT_STORAGE_URI", "memory://"),
@@ -212,6 +215,11 @@ def create_app(test_config=None):
     app.config["DB_ENGINE"] = create_db_engine(app.config["DATABASE_URL"])
     if not app.config["SECRET_KEY"] or len(app.config["SECRET_KEY"]) < 32:
         raise RuntimeError("Set FLASK_SECRET_KEY to a random value of at least 32 characters.")
+    if app.config["SECURITY_POLICY_STORE"] is None:
+        policy_path = app.config["SECURITY_POLICY_PATH"]
+        if not policy_path:
+            policy_path = str(Path(app.config["DATABASE_PATH"]).with_name("waf-policy.sqlite3"))
+        app.config["SECURITY_POLICY_STORE"] = PolicyStore(Path(policy_path))
 
     origins = app.config["CORS_ALLOWED_ORIGINS"]
     if isinstance(origins, str):
@@ -227,8 +235,6 @@ def create_app(test_config=None):
             }
         },
     )
-    limiter.init_app(app)
-
     @app.after_request
     def add_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -240,6 +246,35 @@ def create_app(test_config=None):
         if request.is_secure:
             response.headers['Strict-Transport-Security'] = 'max-age=31536000'
         return response
+
+    @app.before_request
+    def enforce_shared_request_policy():
+        if not request.path.startswith("/api/") or app.config["SECURITY_POLICY_ENFORCED_BY_WAF"]:
+            return None
+        store = app.config["SECURITY_POLICY_STORE"]
+        policy = Policy.model_validate(store.read()["policy"])
+        if not app.config["SECURITY_ALLOW_DISABLED_MODE"] and (
+            policy.mode == "disabled" or not policy.brute_force
+        ):
+            abort(503, description="Stored security policy violates mandatory production login protection.")
+        if policy.mode == "disabled" or not policy.rate_limiting:
+            return None
+        ip = request.remote_addr or "unknown"
+        global_exceeded = store.over_limit(
+            "backend-global", ip, policy.rate_limit_requests, policy.rate_limit_window_seconds,
+        )
+        route_exceeded = store.over_limit(
+            "backend-route:" + (request.endpoint or "unknown"), ip,
+            policy.route_limit_requests, policy.route_limit_window_seconds,
+        )
+        if global_exceeded or route_exceeded:
+            if policy.event_logging:
+                app.logger.warning("security_event=RATE_LIMIT rule_id=RATE-001")
+            if policy.mode == "block":
+                return jsonify({"success": False, "message": "Too many requests."}), 429, {
+                    "Retry-After": str(policy.rate_limit_window_seconds),
+                }
+        return None
 
     @app.errorhandler(400)
     @app.errorhandler(401)
@@ -258,14 +293,12 @@ def create_app(test_config=None):
         return jsonify({"success": False, "message": "Internal server error."}), 500
 
     @app.get("/api/menu")
-    @limiter.limit("120 per minute")
     def get_menu():
         with get_db_connection() as connection:
             items = connection.execute("SELECT * FROM menu_items ORDER BY id").fetchall()
         return jsonify([dict(item) for item in items])
 
     @app.post("/api/staff/login")
-    @limiter.limit("5 per minute")
     def staff_login():
         data = _json_object()
         if set(data) != {"username", "password"}:
@@ -274,46 +307,57 @@ def create_app(test_config=None):
         password = data.get("password")
         if not isinstance(password, str) or not password or len(password) > 256:
             abort(400, description="A valid password is required.")
-        identities = login_guard.keys(request.remote_addr or 'unknown', username)
-        retry = login_guard.admit(app.config['DB_ENGINE'], identities)
+        policy_store = app.config["SECURITY_POLICY_STORE"]
+        policy = Policy.model_validate(policy_store.read()["policy"])
+        if not app.config["SECURITY_ALLOW_DISABLED_MODE"] and (
+            policy.mode == "disabled" or not policy.brute_force
+        ):
+            abort(503, description="Stored security policy violates mandatory production login protection.")
+        retry = login_guard.admit(policy_store, request.remote_addr or 'unknown', username, policy)
         if retry:
-            app.logger.warning('security_event=LOGIN_LIMIT rule_id=AUTH-001')
-            return jsonify({'success': False, 'message': 'Too many login attempts.'}), 429, {'Retry-After': str(retry)}
+            if policy.event_logging:
+                app.logger.warning('security_event=LOGIN_LIMIT rule_id=AUTH-001')
+            return jsonify({'success': False, 'message': 'Too many login attempts.'}), 429, {
+                'Retry-After': str(retry),
+            }
 
+        invalid_credentials = False
         with get_db_connection() as connection:
             user = connection.execute(
                 "SELECT id, password, role FROM staff WHERE LOWER(username) = ?",
                 (username,),
             ).fetchone()
             if user is None or user["role"] not in ROLES:
-                app.logger.warning('security_event=LOGIN_FAILURE rule_id=AUTH-FAIL-001')
-                abort(401, description="Invalid username or password.")
-
-            stored_password = user["password"]
-            if stored_password.startswith(("scrypt:", "pbkdf2:")):
-                try:
-                    password_valid = check_password_hash(stored_password, password)
-                except (TypeError, ValueError):
-                    password_valid = False
+                invalid_credentials = True
             else:
-                password_valid = hmac.compare_digest(
-                    stored_password.encode("utf-8"), password.encode("utf-8")
-                )
-                if password_valid:
-                    connection.execute(
-                        "UPDATE staff SET password = ? WHERE id = ?",
-                        (generate_password_hash(password), user["id"]),
+                stored_password = user["password"]
+                if stored_password.startswith(("scrypt:", "pbkdf2:")):
+                    try:
+                        password_valid = check_password_hash(stored_password, password)
+                    except (TypeError, ValueError):
+                        password_valid = False
+                else:
+                    password_valid = hmac.compare_digest(
+                        stored_password.encode("utf-8"), password.encode("utf-8")
                     )
-            if not password_valid:
+                    if password_valid:
+                        connection.execute(
+                            "UPDATE staff SET password = ? WHERE id = ?",
+                            (generate_password_hash(password), user["id"]),
+                        )
+                invalid_credentials = not password_valid
+        if invalid_credentials:
+            detected = login_guard.failure(policy_store, request.remote_addr or 'unknown', username, policy)
+            if policy.event_logging:
                 app.logger.warning('security_event=LOGIN_FAILURE rule_id=AUTH-FAIL-001')
-                abort(401, description="Invalid username or password.")
-
-        login_guard.success(app.config['DB_ENGINE'], identities)
+                if detected:
+                    app.logger.warning('security_event=LOGIN_THRESHOLD rule_id=AUTH-001')
+            abort(401, description="Invalid username or password.")
+        login_guard.success(policy_store, username)
         token = _token_serializer().dumps({"staff_id": user["id"]})
         return jsonify({"success": True, "role": user["role"], "token": token})
 
     @app.post("/api/menu/add")
-    @limiter.limit("30 per minute")
     @require_roles("admin")
     def add_menu_item():
         values = _menu_payload(_json_object())
@@ -329,7 +373,6 @@ def create_app(test_config=None):
         return jsonify({"success": True})
 
     @app.put("/api/menu/edit/<int:item_id>")
-    @limiter.limit("30 per minute")
     @require_roles("admin")
     def edit_menu_item(item_id):
         values = _menu_payload(_json_object())
@@ -347,7 +390,6 @@ def create_app(test_config=None):
         return jsonify({"success": True})
 
     @app.delete("/api/menu/delete/<int:item_id>")
-    @limiter.limit("30 per minute")
     @require_roles("admin")
     def delete_menu_item(item_id):
         with get_db_connection() as connection:
@@ -357,7 +399,6 @@ def create_app(test_config=None):
         return jsonify({"success": True})
 
     @app.post("/api/orders")
-    @limiter.limit("20 per minute")
     def create_order():
         data = _json_object()
         if not {"table_number", "items"}.issubset(data) or not set(data).issubset(
@@ -438,7 +479,6 @@ def create_app(test_config=None):
         return orders
 
     @app.get("/api/orders")
-    @limiter.limit("120 per minute")
     @require_roles("admin", "waiter", "chef")
     def get_orders():
         return jsonify(
@@ -446,7 +486,6 @@ def create_app(test_config=None):
         )
 
     @app.get("/api/orders/archive")
-    @limiter.limit("60 per minute")
     @require_roles("admin", "waiter")
     def get_archive():
         return jsonify(
@@ -454,7 +493,6 @@ def create_app(test_config=None):
         )
 
     @app.put("/api/orders/<int:order_id>")
-    @limiter.limit("30 per minute")
     @require_roles("admin", "waiter", "chef")
     def update_order_status(order_id):
         data = _json_object()
@@ -503,7 +541,6 @@ def create_app(test_config=None):
         return jsonify({"success": True})
 
     @app.delete("/api/orders/<int:order_id>")
-    @limiter.limit("20 per minute")
     @require_roles("admin", "waiter")
     def delete_order(order_id):
         with get_db_connection() as connection:

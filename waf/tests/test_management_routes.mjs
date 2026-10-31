@@ -27,7 +27,7 @@ test('Authenticated template keeps the existing design and same-origin navigatio
   assert.ok(panel.includes('href="/dashboard/login?next=/settings"'));
   assert.ok(panel.includes('href="https://chillibek.online/"'));
   assert.doesNotMatch(source, /window\.location\.replace|localStorage|sessionStorage|credentials:\s*['"]include/);
-  assert.ok(source.includes('fetch(`/waf-api/settings${path}`'));
+  assert.ok(source.includes("const url = path.startsWith('/waf-api/') ? path : `/waf-api/settings${path}`;"));
   assert.ok(source.includes("credentials: 'same-origin'"));
 });
 

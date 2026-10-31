@@ -2,9 +2,12 @@
 
 ## Release status — 2026-10-31
 
-The tested WAF implementation is commit `015e522cba32f04f9bcbfa03ed3e41da3a109f7a`.
 The static public Settings and Dashboard gateways were published to `main` at
 `59725b8f89b5827a0b02306b3c80f79dfaffb2b9`; GitHub Pages run 28 succeeded.
+The restaurant staff authentication fix was published to `main` at
+`9e18983cf914d237fcafb0ab7fe8063485c4d037`; GitHub Pages run 29 succeeded.
+Cache-busted public `admin.html` and `kitchen.html` responses contain the staff
+token storage and Bearer-header API wrapper. An uncached response was stale.
 The live public `/settings/` returned 200 and contained the fixed “Manage live WAF”
 link, with no management API client or credentials.
 
@@ -18,6 +21,11 @@ PythonAnywhere source, WSGI configuration, policy database, or operator account
 was changed. Use the update and acceptance steps below before claiming the live
 backend release is complete.
 
+The centralized login policy, Active Blocks, and Login Abuse Demo changes in
+this development release are not deployed to PythonAnywhere. Publishing to
+GitHub Pages does not update the backend; the Demo Lab must not be described as
+live until the manual backend update and acceptance checks below succeed.
+
 ## Routing and authentication
 
 ```text
@@ -28,6 +36,8 @@ https://kali.pythonanywhere.com/settings
            Authenticated: 308 /settings/ then the existing control panel
 https://kali.pythonanywhere.com/waf-api/settings
            Same-origin dashboard session; signed session-bound CSRF for writes
+https://kali.pythonanywhere.com/settings/demo
+           Operator-authenticated, isolated login-abuse demonstration
 ```
 
 Production observation on 2026-10-31: anonymous `/settings/` returned 200 while
@@ -74,14 +84,79 @@ regardless of switch values. Foreign Origin and cross-site/same-site fetch
 metadata cannot authorize writes. Bare and nested `/waf-api` routes authenticate
 before validation and cannot fall through to the restaurant backend.
 
+The WAF `PolicyStore` is also Flask's login-policy and lockout store. In the
+protected WSGI deployment, Flask receives that exact store from the adapter;
+standalone Flask uses the configured `WAF_POLICY_PATH` (or its documented
+database-sidecar default). There are no independent Flask login counters or
+hardcoded Flask-Limiter staff-login decorators. Defaults are 5 failed attempts per
+account or 20 per IP in 900 seconds, with a 30-second initial lockout, 2x
+progression and a 900-second maximum. Account/IP thresholds, tracking window,
+initial duration, multiplier and cap are editable within validated bounds; the
+account threshold is 1–100, IP threshold 1–1000, window 60–86400 seconds,
+initial lockout 5–3600 seconds, multiplier 1–10 and maximum 30–86400 seconds;
+the maximum must be at least the initial duration. A successful account login
+clears that account's failure counter.
+The Settings response and page display effective global, per-route, and body-size
+limits after applying any lower WAF deployment ceilings. The configured policy
+is persistent; the WAF's hard request-body ceiling remains mandatory even when
+optional request-size protection is off or the isolated demo uses Disabled mode.
+
+Block mode enforces enabled request/login controls and active blocks. Monitor
+mode continues detection and event recording but suspends optional blocks,
+including manual blocks; blocks remain stored and their effective state is shown
+in Settings. Disabled mode also suspends optional controls, but `allow_disabled_mode`
+defaults to false and must only be enabled in an isolated synthetic test
+deployment. Production rejects Disabled mode and a disabled Login Abuse switch.
+Even in isolated Disabled mode, incorrect passwords remain incorrect, operator
+authentication/authorization/CSRF/auditing and protocol safety remain enforced.
+The production Login Abuse control cannot be turned off, though validated
+thresholds can be relaxed.
+
+The Active Blocks panel lists masked account identifiers or IPs, rule, reason,
+attempt count, start/expiry and remaining time. Manual block/unblock actions are
+authenticated, CSRF protected and audited; an unblock removes the matching live
+enforcement record immediately. Expiration is persisted to the block audit
+history when the shared store next observes the elapsed deadline.
+
+The scanner threshold and tracking window are also persistent policy fields and
+are enforced by the WAF from the same policy snapshot as its other request
+controls.
+
+## Login Abuse Demo Lab
+
+`/settings/demo` and its `/waf-api/demo*` endpoints require the WAF operator
+session. Writes and synthetic login attempts also require the session-bound
+CSRF token and same-origin request checks. The demo accepts only the synthetic
+username `demo_waiter`; it does not call Flask, query the staff table, create a
+restaurant token, or read/write orders. Its SQLite policy/counter/block store is
+derived from the existing policy path with a `-demo` filename suffix and is
+separate from both the production policy store and restaurant database.
+
+WAF OFF sets Disabled only in that isolated demo policy: repeated incorrect
+passwords return actual HTTP 401 responses without recording a lockout, while
+password verification remains active. WAF ON uses the same `PolicyStore`
+admission, failure, lockout, expiration, and audit methods as staff Login Abuse.
+The page caps each batch at 20 sequential requests and stops on the first HTTP
+429. Threshold is configurable from 1–20 and lockout from 30–3600 seconds.
+Automatic blocks, remaining time, recent block audit and an immediate
+CSRF-protected unblock are shown in the demo operator page. Demo settings and
+blocks persist across WSGI reloads without changing production staff-login
+policy.
+
+The page displays the synthetic demo-only password after operator
+authentication. It is not a WAF management credential and is not accepted by
+the restaurant staff-login endpoint.
+
 ## PythonAnywhere update commands
 
 Use a PythonAnywhere **Bash console**. Obtain the existing checkout, virtualenv,
 WSGI filename and policy filename from the current Web tab/WSGI/environment
 configuration; do not guess them or paste secrets. These commands preserve the
-installed WSGI file and refuse an update that also changes restaurant code,
-dependencies, schema tooling or the WSGI deployment example. If a check fails,
-stop and review that difference in staging; do not reset or force the checkout.
+installed WSGI file and allow the reviewed shared login-policy integration in
+`backend/server.py`, `backend/login_guard.py` and its focused test. They reject
+other backend changes, frontend/restaurant changes, dependencies, schema tooling
+and the WSGI deployment example. If a check fails, stop and review that
+difference in staging; do not reset or force the checkout.
 Do not configure a static `/settings` mapping that bypasses the WSGI routes.
 
 ```bash
@@ -102,8 +177,11 @@ test -z "$(git status --porcelain)"
 git fetch origin dev
 test "$(git rev-parse "$RELEASE_COMMIT^{commit}")" = "$(git rev-parse origin/dev)"
 git merge-base --is-ancestor HEAD "$RELEASE_COMMIT"
+UNEXPECTED_BACKEND=$(git diff --name-only HEAD "$RELEASE_COMMIT" -- backend \
+  | grep -Ev '^backend/(server.py|login_guard.py|tests/test_backend_advanced_security.py)$' || true)
+test -z "$UNEXPECTED_BACKEND"
 git diff --exit-code HEAD "$RELEASE_COMMIT" -- \
-  backend index.html admin.html kitchen.html CNAME requirements.txt \
+  index.html admin.html kitchen.html CNAME requirements.txt \
   requirements-dev.txt deploy alembic.ini docker-compose.yml
 git diff --stat HEAD "$RELEASE_COMMIT"
 
@@ -174,9 +252,56 @@ with sqlite3.connect(Path(sys.argv[1]).resolve().as_uri() + '?mode=ro', uri=True
 PY
 ```
 
-For a source rollback, restore only this release's changed WAF/settings files from
-the recorded previous commit and reload the existing app. Keep the current policy
-database; do not overwrite newer operator changes with a backup automatically.
+For a source rollback, do not reload the old source against the migrated policy
+JSON: the previous release validates an older, exact policy shape. First back up
+the current policy database as above. Restore the release's changed source files
+from the recorded previous commit, then transactionally project the current
+policy row onto the previous schema before reloading. This retains the common
+protection switches, revision, audit history and database file; newer threshold
+settings cannot be represented by the previous source. Do not restore the
+pre-deployment database backup unless deliberately discarding policy changes
+made since that backup.
+
+Run this using the existing virtualenv and policy path after restoring source but
+before reloading. It refuses an unexpected policy shape and records the rollback
+in the existing audit table:
+
+```bash
+"$LIVE_VENV/bin/python" - "$LIVE_POLICY" <<'PY'
+import json, sqlite3, sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+keys = {
+    "mode", "sql_injection", "xss", "path_traversal", "rate_limiting",
+    "suspicious_headers", "request_size", "event_logging",
+    "command_injection", "brute_force", "bot_detection",
+}
+with sqlite3.connect(Path(sys.argv[1])) as db:
+    db.execute("BEGIN IMMEDIATE")
+    row = db.execute("SELECT value FROM policy WHERE id=1").fetchone()
+    if row is None:
+        raise RuntimeError("Stored WAF policy is missing")
+    current = json.loads(row[0])
+    if not keys <= current.keys() or current["mode"] not in {"block", "monitor"}:
+        raise RuntimeError("Policy is not compatible with this source rollback")
+    legacy = {key: current[key] for key in keys}
+    timestamp = datetime.now(timezone.utc).isoformat()
+    db.execute(
+        "UPDATE policy SET value=?, revision=revision+1, updated_at=?, "
+        "updated_by=? WHERE id=1",
+        (json.dumps(legacy), timestamp, "source-rollback"),
+    )
+    db.execute(
+        "INSERT INTO configuration_audit(timestamp, actor, action, details) "
+        "VALUES (?, ?, ?, ?)",
+        (timestamp, "source-rollback", "policy_schema_rollback",
+         json.dumps({"retained_fields": sorted(keys)})),
+    )
+```
+
+Then reload the existing app and run the anonymous checks above. Keep the
+pre-deployment backup private for recovery; do not replace the live database.
 
 ## GitHub Pages publication — completed 2026-10-31
 
@@ -189,10 +314,16 @@ policy. PythonAnywhere backend acceptance remains a separate required step.
 
 ## Reproducible local verification
 
+On the current development worktree, the full backend/WAF suite passed
+**224 tests**; the public Settings route tests passed **4 tests**; both Settings
+JavaScript files passed Node syntax checks. These are local results and do not
+verify the PythonAnywhere release or the not-yet-deployed Demo Lab.
+
 ```powershell
 .\.venv\Scripts\python.exe -m pytest backend/tests waf/tests -q
 node --test waf/tests/test_management_routes.mjs
 node --check settings/settings.js
+node --check settings/demo.js
 git diff --check
 ```
 

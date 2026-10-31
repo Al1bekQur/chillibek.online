@@ -38,6 +38,7 @@ def main():
             dashboard_password_hash=generate_password_hash('synthetic-browser-password'),
             dashboard_session_secret='synthetic-browser-waf-session-secret-at-least-32-characters',
             dashboard_secure_cookies=False,  # HTTP loopback only.
+            allow_disabled_mode=True,
         ))
         with make_server('127.0.0.1', 8765, application) as server:
             print('Synthetic WSGI staging: http://127.0.0.1:8765/settings/', flush=True)

@@ -77,6 +77,10 @@ class ProtectedWSGI:
                            upstream_transport=InProcessTransport(application),
                            forward_upstream_cookies=True)
         self.waf = create_app(settings)
+        if hasattr(application, "config"):
+            application.config["SECURITY_POLICY_STORE"] = self.waf.state.policy_store
+            application.config["SECURITY_POLICY_ENFORCED_BY_WAF"] = True
+            application.config["SECURITY_ALLOW_DISABLED_MODE"] = settings.allow_disabled_mode
         self._adapter = None
         self._adapter_pid = None
         self._loop_thread = None

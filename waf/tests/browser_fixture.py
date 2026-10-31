@@ -21,6 +21,7 @@ def create_test_app():
         dashboard_password_hash=generate_password_hash('synthetic-browser-password'),
         dashboard_session_secret='synthetic-browser-session-secret-at-least-32-characters',
         dashboard_secure_cookies=False,
+        allow_disabled_mode=True,
     ))
     app.state.temporary_directory = temporary
     return app

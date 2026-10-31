@@ -43,6 +43,7 @@ async def engine(tmp_path):
 
     settings = WAFSettings(log_path=tmp_path / 'events.log', policy_path=tmp_path / 'policy.sqlite3',
         upstream_transport=httpx.ASGITransport(app=upstream), rate_limit_requests=10000, route_limit_requests=10000,
+        allow_disabled_mode=True,
         dashboard_username='synthetic-operator', dashboard_password_hash=generate_password_hash('synthetic-password'),
         dashboard_session_secret='synthetic-advanced-session-secret-at-least-32-characters')
     app = create_app(settings)
@@ -138,26 +139,20 @@ def test_sliding_window_does_not_reset_at_clock_boundary(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_distributed_login_lock_toggle_monitor_persistence(engine):
+async def test_waf_does_not_duplicate_shared_flask_login_guard(engine):
     _, app, settings, _ = engine
     async def attempt(ip):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=(ip,1234)), base_url='https://staging.test') as client:
             return await client.post('/api/staff/login', json={'username':'synthetic-target','password':'synthetic-never-log'})
-    for i in range(5):
-        assert (await attempt(f'192.0.2.{i}')).status_code == 401
-    assert (await attempt('192.0.2.10')).status_code == 429
-    apply(app, mode='monitor')
-    assert (await attempt('192.0.2.11')).status_code == 401
-    apply(app, mode='block', brute_force=False)
-    assert (await attempt('192.0.2.12')).status_code == 401
-    assert create_app(settings).state.policy_store.read()['policy']['brute_force'] is False
+    results = [(await attempt(f'192.0.2.{i}')).status_code for i in range(6)]
+    assert results == [401] * 6
     assert 'synthetic-never-log' not in settings.log_path.read_text()
 
 
 @pytest.mark.anyio
 async def test_scanner_sequences_toggle_and_monitor(engine):
     client, app, settings, _ = engine
-    for i in range(settings.bot_probe_limit):
+    for i in range(Policy().bot_detection_limit):
         assert (await client.get('/synthetic-missing-' + str(i), headers={'User-Agent':'Ordinary Browser'})).status_code == 404
     assert (await client.get('/api/menu')).status_code == 429
     apply(app, mode='monitor')
@@ -166,6 +161,26 @@ async def test_scanner_sequences_toggle_and_monitor(engine):
     apply(app, mode='block', bot_detection=False)
     assert (await client.get('/api/menu')).status_code == 200
     assert create_app(settings).state.policy_store.read()['policy']['bot_detection'] is False
+
+
+@pytest.mark.anyio
+async def test_scanner_threshold_and_window_are_live_policy(engine):
+    client, app, settings, captured = engine
+    before = app.state.policy_store.read()
+    app.state.policy_store.update(
+        Policy(**{**before['policy'], 'bot_detection_limit': 2, 'bot_detection_window_seconds': 60}),
+        before['revision'], 'synthetic-operator',
+    )
+    for index in range(2):
+        assert (await client.get(f'/threshold-probe-{index}')).status_code == 404
+    blocked = await client.get('/api/menu')
+    assert blocked.status_code == 429
+    apply(app, mode='monitor')
+    monitored = await client.get('/api/menu')
+    assert monitored.status_code == 200
+    event = json.loads(settings.log_path.read_text().splitlines()[-1])
+    assert 'BOT-001' in event['matched_rules']
+    assert captured == ['threshold-probe-0', 'threshold-probe-1', 'api/menu']
 
 
 @pytest.mark.anyio
