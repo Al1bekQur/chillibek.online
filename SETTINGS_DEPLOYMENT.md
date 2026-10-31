@@ -1,19 +1,22 @@
 # Live WAF settings deployment
 
-## Release status — 2026-10-24
+## Release status — 2026-10-31
 
-The operator reports that the PythonAnywhere WSGI adapter and administrator
-credentials are already deployed. This release connects public navigation to an
-authenticated settings interface on that existing application. No production
-WSGI configuration, database, credentials, Pages branch or DNS is changed by this
-development task. The commands below are prepared for the operator to run.
+The tested WAF implementation is commit `015e522cba32f04f9bcbfa03ed3e41da3a109f7a`.
+The static public Settings and Dashboard gateways were published to `main` at
+`59725b8f89b5827a0b02306b3c80f79dfaffb2b9`; GitHub Pages run 28 succeeded.
+The live public `/settings/` returned 200 and contained the fixed “Manage live WAF”
+link, with no management API client or credentials.
 
-Read-only HTTPS checks before this release: public `/settings/` returned 200;
-PythonAnywhere `/settings` returned 308 to `/settings/`, which returned 200;
-`/dashboard/login` returned 200; anonymous `/waf-api/settings` returned 401;
-`/api/menu` returned 200. These checks do **not** establish that authenticated live
-updates work. Production must be updated and tested before declaring this release
-operational.
+PythonAnywhere read-only checks on 2026-10-31 returned `/settings/` 200,
+`/dashboard/login` 200, anonymous `/waf-api/settings` 401, and `/api/menu` 200.
+The unauthenticated Settings page returning 200 differs from the current source
+route, which should redirect to login. The policy API still rejects anonymous
+access; however, this does not verify page-level authentication or authenticated
+policy reads, writes, persistence, enforcement, or dashboard events. No
+PythonAnywhere source, WSGI configuration, policy database, or operator account
+was changed. Use the update and acceptance steps below before claiming the live
+backend release is complete.
 
 ## Routing and authentication
 
@@ -21,11 +24,16 @@ operational.
 https://chillibek.online/settings/       Public static gateway; no API requests
            Manage live WAF link
 https://kali.pythonanywhere.com/settings
-           Anonymous: 303 /dashboard/login?next=/settings
+           Source expectation: anonymous -> 303 /dashboard/login?next=/settings
            Authenticated: 308 /settings/ then the existing control panel
 https://kali.pythonanywhere.com/waf-api/settings
            Same-origin dashboard session; signed session-bound CSRF for writes
 ```
+
+Production observation on 2026-10-31: anonymous `/settings/` returned 200 while
+anonymous `/waf-api/settings` returned 401. Investigate and correct any
+PythonAnywhere static mapping that bypasses the WSGI settings route; do not make
+the WAF API or policy public.
 
 The public gateway retains the dark design, describes all eleven controls and
 offers Dashboard and Restaurant links. It stays publicly accessible and works
@@ -170,35 +178,14 @@ For a source rollback, restore only this release's changed WAF/settings files fr
 the recorded previous commit and reload the existing app. Keep the current policy
 database; do not overwrite newer operator changes with a backup automatically.
 
-## GitHub Pages publication — after backend verification
+## GitHub Pages publication — completed 2026-10-31
 
-The established publication target is `main` at `/`; verify Settings → Pages still
-uses that source and the custom domain `chillibek.online`. No source/DNS change is
-needed. This task only pushes `dev`; it does not merge or publish `main`.
-
-Prepare a narrow release branch from `origin/main`, using the same tested commit
-as above. These commands copy only public navigation and shared styling, avoiding
-unrelated restaurant/backend changes on `dev`:
-
-```bash
-git fetch origin main dev
-read -r -p 'Tested dev commit from the final report: ' RELEASE_COMMIT
-git worktree add -b release/live-waf-settings ../chillibek-pages-settings origin/main
-cd ../chillibek-pages-settings
-git restore --source="$RELEASE_COMMIT" -- settings/index.html settings/settings.css dashboard/index.html
-git add -- settings/index.html settings/settings.css dashboard/index.html
-git diff --cached --check
-git diff --cached --stat
-git commit -m "Publish live WAF management navigation"
-git push -u origin release/live-waf-settings
-```
-
-Open a PR from `release/live-waf-settings` to `main`. Review the three-file
-allowlist and merge manually only after PythonAnywhere passes acceptance. Wait for
-the Pages deployment, then verify `https://chillibek.online/settings/` stays public,
-loads the design and prominent action, and requests no management APIs. Follow
-Manage live WAF to the backend login and confirmed policy. Check the public
-Dashboard gateway and restaurant menu. A Git push alone is not live verification.
+Commit `59725b8f89b5827a0b02306b3c80f79dfaffb2b9` fast-forwarded `main` and changed
+only `settings/index.html` and `dashboard/index.html`. Pages run 28 completed
+successfully. A live read-only check confirmed that
+`https://chillibek.online/settings/` returns 200, links directly to the WAF host,
+and does not request the management API. The public page does not display a live
+policy. PythonAnywhere backend acceptance remains a separate required step.
 
 ## Reproducible local verification
 
@@ -209,9 +196,11 @@ node --check settings/settings.js
 git diff --check
 ```
 
-Observed for this release: **215 Python tests passed**, **4 Node routing tests
-passed**, **8 authenticated Chrome browser checks passed** and **4 public gateway
-browser checks passed**. All eleven controls have WSGI-level independent enforcement,
+Latest repeatable local results on 2026-10-31: **215 Python tests passed**,
+**4 Node routing tests passed**, and `node --check settings/settings.js` passed.
+The earlier release also recorded **8 authenticated Chrome browser checks** and
+**4 public gateway browser checks**; those browser suites were not rerun in this
+task. All eleven controls have WSGI-level independent enforcement,
 update, restore, already-running worker and recreated-application persistence checks.
 The suite covers authentication, CSRF, malformed inputs, stale revisions, audit
 events/rollback, SQLi/XSS/traversal/command/header/size/rate behavior, WAF login/probe
@@ -234,5 +223,6 @@ Start a fresh dedicated browser for `node waf/tests/browser_static_settings.mjs`
 Both scripts close only that QA browser; stop the temporary servers afterwards.
 Screenshots are ignored local artifacts under `waf/local/`. Desktop/mobile layout,
 all eleven switches, rejected-write reconciliation, unavailable APIs and expired
-sessions passed with no uncaught JavaScript exceptions. No production policy write,
-login, attack simulation, database migration or deployment was performed.
+sessions passed with no uncaught JavaScript exceptions in the earlier recorded
+browser run. No PythonAnywhere login, policy write, attack simulation, database
+migration, or backend deployment was performed for this release.
