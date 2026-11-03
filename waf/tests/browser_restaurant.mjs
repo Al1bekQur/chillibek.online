@@ -6,8 +6,9 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
 const apiOrigin = 'http://127.0.0.1:8765';
-const frontOrigin = 'http://127.0.0.1:8767';
-const files = new Map(['index.html', 'admin.html', 'kitchen.html', 'restaurant-dom.js'].map(file =>
+const hosted = process.argv.includes('--hosted');
+const frontOrigin = hosted ? apiOrigin : 'http://127.0.0.1:8767';
+const files = new Map(['index.html', 'admin.html', 'kitchen.html', 'restaurant-dom.js', ...['index', 'admin', 'kitchen'].flatMap(page => [`restaurant-${page}.js`, `restaurant-${page}.css`])].map(file =>
   ['/' + file, readFileSync(new URL('../../' + file, import.meta.url), 'utf8')]));
 const target = await fetch('http://127.0.0.1:9222/json/new?about:blank', {method: 'PUT'}).then(r => r.json());
 const socket = new WebSocket(target.webSocketDebuggerUrl);
@@ -35,10 +36,18 @@ async function intercept(event) {
   intercepted++;
   const url = new URL(event.request.url);
   if (url.origin === frontOrigin && files.has(url.pathname)) {
-    // No frontend CSP: these tests must prove rendering safety without it.
-    return fulfill(event, files.get(url.pathname), url.pathname.endsWith('.js') ? 'text/javascript' : 'text/html; charset=utf-8');
+    if (hosted) {
+      const response = await fetch(apiOrigin + url.pathname);
+      assert.equal(response.status, 200);
+      if (url.pathname.endsWith('.html')) assert.ok(response.headers.get('content-security-policy')?.includes("script-src 'self'"));
+      return command('Fetch.fulfillRequest', {requestId:event.requestId, responseCode:response.status,
+        responseHeaders:[...response.headers].filter(([name]) => !['content-length','connection','transfer-encoding'].includes(name)).map(([name,value]) => ({name,value})),
+        body:Buffer.from(await response.arrayBuffer()).toString('base64')});
+    }
+    // Static Pages compatibility also proves rendering safety without CSP.
+    return fulfill(event, files.get(url.pathname), url.pathname.endsWith('.js') ? 'text/javascript' : url.pathname.endsWith('.css') ? 'text/css' : 'text/html; charset=utf-8');
   }
-  if (url.origin === 'https://kali.pythonanywhere.com' && url.pathname.startsWith('/api/')) {
+  if ((url.origin === 'https://kali.pythonanywhere.com' || hosted && url.origin === apiOrigin) && url.pathname.startsWith('/api/')) {
     const headers = Object.fromEntries(Object.entries(event.request.headers).filter(([name]) => allowedHeaders.has(name.toLowerCase())));
     const body = ['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) ? undefined : event.request.postData;
     if (url.pathname === '/api/orders' && event.request.method === 'POST') orderBodies.push(JSON.parse(body));
@@ -167,7 +176,7 @@ try {
     assert.equal(await evaluate(`document.getElementById('detailsDesc').textContent`), record.description);
   }
   assert.equal(await evaluate(`document.getElementById('btn-container-${legacy.id}').closest('.menu-item').querySelector('img').hasAttribute('src')`), false);
-  await safeRendering(); pass('Stored payloads stay inert in menu cards and details with XSS ON, without CSP');
+  await safeRendering(); pass(`Stored payloads stay inert in menu cards and details with XSS ON; CSP ${hosted ? 'enforced' : 'absent'}`);
   const purchased = saved[2];
   await evaluate(`closeDetails();document.getElementById('btn-container-${purchased.id}').querySelector('button').click()`);
   assert.equal(await evaluate(`document.querySelector('.cart-item-name').textContent`), purchased.name);

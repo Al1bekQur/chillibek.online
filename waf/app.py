@@ -2,8 +2,6 @@ import asyncio
 import json
 import re
 import secrets
-import base64
-import hashlib
 import ipaddress
 import sqlite3
 from datetime import datetime, timezone
@@ -16,13 +14,16 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
 from .config import WAFSettings
-from .dashboard import dashboard_router, require_dashboard_auth, _css, _javascript
+from .dashboard import dashboard_router, require_dashboard_auth
 from .policy import Policy, PolicyStore
 from .rules import inspect_headers, inspect_values
 from .parsing import request_values
 from .protocol import ProtocolGuard
 from .settings_api import settings_router
 from .enforcement import RequestPolicy
+from .csp_policy import response_headers as csp_headers
+from .csp_reporting import csp_router
+from .frontend import frontend_router
 
 
 HOP_BY_HOP_HEADERS = {
@@ -47,6 +48,7 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
     app.state.policy_store = store
     app.include_router(dashboard_router(settings))
     app.include_router(settings_router(settings, store))
+    app.include_router(csp_router(settings, store))
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, error):
@@ -57,6 +59,7 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
     async def management_security(request: Request, call_next):
         management = request.url.path == "/waf-api" or request.url.path.startswith(("/waf-api/", "/dashboard", "/settings"))
         try:
+            request.state.policy_snapshot = store.read()
             if management:
                 # Authentication, authorization, login throttling and audit never depend on policy toggles.
                 actor = None
@@ -86,11 +89,8 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers['X-Frame-Options'] = 'DENY'
             response.headers['Referrer-Policy'] = 'no-referrer'
-            script_hash = base64.b64encode(hashlib.sha256(_javascript().encode()).digest()).decode()
-            style_hash = base64.b64encode(hashlib.sha256(_css().encode()).digest()).decode()
-            if management or request.url.path.startswith('/settings'):
-                response.headers['Content-Security-Policy'] = ("default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
-                    "form-action 'self'; script-src 'self' 'sha256-" + script_hash + "'; style-src 'self' 'sha256-" + style_hash + "'")
+            if response.headers.get('content-type', '').split(';')[0] == 'text/html':
+                response.headers.update(csp_headers(Policy.model_validate(request.state.policy_snapshot['policy'])))
             if request.url.scheme == 'https':
                 response.headers['Strict-Transport-Security'] = 'max-age=31536000'
             return response
@@ -106,11 +106,13 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
             "component": "chillibek-waf",
         }
 
+    app.include_router(frontend_router(settings))
+
     @app.api_route("/{path:path}", methods=["GET", "HEAD", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
     async def proxy(path: str, request: Request) -> Response:
         # One immutable snapshot per request; a committed update is used by the next request,
         # including requests handled by another worker using the same durable volume.
-        snapshot = store.read()
+        snapshot = request.state.policy_snapshot
         policy = Policy.model_validate(snapshot["policy"])
         context = RequestPolicy(policy, snapshot['revision'], store, settings.allow_disabled_mode)
         request.state.policy_revision = context.revision

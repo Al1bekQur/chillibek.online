@@ -8,7 +8,8 @@ import os
 import argparse
 import tempfile
 from pathlib import Path
-from wsgiref.simple_server import make_server
+from wsgiref.simple_server import make_server, WSGIServer
+from socketserver import ThreadingMixIn
 
 from werkzeug.security import generate_password_hash
 
@@ -16,9 +17,17 @@ from waf.config import WAFSettings
 from waf.wsgi import protect_wsgi
 
 
+class BrowserServer(ThreadingMixIn, WSGIServer):
+    # Chrome may open speculative idle connections; they must not starve the
+    # real request in wsgiref's otherwise single-threaded development server.
+    daemon_threads = True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--restaurant', action='store_true', help='Add disposable staff and a legacy XSS record for browser regressions.')
+    parser.add_argument('--csp', action='store_true', help='Serve real frontend HTML through the existing WAF.')
+    parser.add_argument('--csp-probes', action='store_true', help='Inject test-only HTML probes into responses on loopback.')
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='chillibek-wsgi-staging-') as directory:
         root = Path(directory)
@@ -47,6 +56,40 @@ def main():
                     'snacks', 'Legacy <img src=x onerror="window.__storedXSS=1">',
                     '</p><script>window.__storedXSS=1</script><svg onload="window.__storedXSS=1">',
                     '100g', 1000, 'javascript:window.__storedXSS=1'))
+        if args.csp_probes:
+            if not args.csp:
+                parser.error('--csp-probes requires --csp')
+            # Deliberately vulnerable HTML exists only in this disposable fixture.
+            # Browser receives it over HTTP; DevTools does not execute the probes.
+            import waf.frontend as frontend
+            original = frontend.load_html
+            def probe_html(name):
+                html = original(name)
+                if name == 'index.html':
+                    html = html.replace('</body>', '''
+<script>window.__cspInline=1</script>
+<button id="csp-probe" onclick="window.__cspHandler=1">CSP fixture probe</button>
+<script src="http://127.0.0.1:8766/forbidden.js"></script>
+<script src="/csp-fixture.js"></script></body>''')
+                return html
+            frontend.load_html = probe_html
+            frontend.ASSETS.add('csp-fixture.js')
+            # Use a test-only route rather than writing a fixture asset in the repo.
+            from fastapi.responses import Response
+            original_router = frontend.frontend_router
+            def with_probe(settings):
+                router = original_router(settings)
+                # Explicit route must precede the fixed asset route of this name.
+                router.routes = [r for r in router.routes if r.path != '/csp-fixture.js']
+                @router.get('/csp-fixture.js')
+                async def probe():
+                    return Response('''window.__cspLegit=1;
+try { eval('window.__cspEval=1'); } catch(e) { window.__cspEvalBlocked=true; }
+try { document.createElement('div').innerHTML='<b>fixture</b>'; window.__cspSinkAccepted=true; }
+catch(e) { window.__cspSinkBlocked=true; }''', media_type='text/javascript')
+                return router
+            import waf.app as waf_app
+            waf_app.frontend_router = with_probe
         application = protect_wsgi(restaurant, WAFSettings(
             log_path=root / 'events.log', policy_path=root / 'policy.sqlite3',
             dashboard_username='synthetic-operator',
@@ -54,8 +97,9 @@ def main():
             dashboard_session_secret='synthetic-browser-waf-session-secret-at-least-32-characters',
             dashboard_secure_cookies=False,  # HTTP loopback only.
             allow_disabled_mode=True,
+            serve_frontend=args.csp,
         ))
-        with make_server('127.0.0.1', 8765, application) as server:
+        with make_server('127.0.0.1', 8765, application, server_class=BrowserServer) as server:
             print('Synthetic WSGI staging: http://127.0.0.1:8765/settings/', flush=True)
             try:
                 server.serve_forever()

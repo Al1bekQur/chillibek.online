@@ -258,7 +258,7 @@ async def test_event_logging_off_preserves_audit_auth_and_dashboard(control):
     state = (await client.get('/waf-api/settings')).json()
     reset = await client.post('/waf-api/settings/reset', json={'revision': state['revision']}, headers={'x-csrf-token': state['csrf_token']})
     assert reset.status_code == 200
-    assert reset.json()['policy'] == Policy().model_dump()
+    assert reset.json()['policy'] == Policy().model_dump(mode='json')
     with sqlite3.connect(settings.policy_path) as connection:
         actions = connection.execute('SELECT action, details FROM configuration_audit').fetchall()
     assert {action for action, _ in actions} >= {'update', 'reset', 'access'}

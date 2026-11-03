@@ -1,0 +1,69 @@
+:root { --bg: #121212; --card: #1E1E1E; --primary: #E05A33; --text: #FFFFFF; --text-muted: #A0A0A0; --border: #2C2C2C; --status-pending: #F39C12; --status-cooking: #3498DB; --status-ready: #2ECC71; }
+        body { font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+
+        .login-container { background: var(--card); padding: 40px 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 100%; max-width: 350px; text-align: center; margin: 10vh auto; }
+        .login-container h2 { margin-top: 0; margin-bottom: 25px; }
+        input { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 1rem; background: #2C2C2C; color: white; }
+        input:focus { outline: none; border-color: var(--primary); }
+        button { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:active { transform: scale(0.98); }
+        .error-msg { color: #E74C3C; font-size: 0.9rem; margin-top: 10px; display: none; }
+
+        .kitchen-container { display: none; max-width: 1400px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 15px;}
+        .header h1 { margin: 0; font-size: 1.5rem; display: flex; align-items: center; }
+        .header .pulse { display: inline-block; width: 10px; height: 10px; background-color: #2ECC71; border-radius: 50%; margin-right: 10px; animation: blink 2s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+
+        .user-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;}
+        .role-badge { background: #2C2C2C; padding: 6px 12px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; border: 1px solid #444; }
+        .action-btn-sm { background: #2C2C2C; width: auto; padding: 8px 15px; }
+        .archive-btn { background: var(--primary); }
+
+        .kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: start; }
+        @media (max-width: 900px) { .kanban-board { grid-template-columns: 1fr; } }
+
+        .kanban-col { background: #181818; border-radius: 16px; padding: 15px; border: 1px solid var(--border); min-height: 500px; }
+        .kanban-col h2 { margin-top: 0; font-size: 1.2rem; text-align: center; padding-bottom: 15px; border-bottom: 2px solid var(--border); }
+        .kanban-col.col-pending h2 { border-bottom-color: var(--status-pending); }
+        .kanban-col.col-cooking h2 { border-bottom-color: var(--status-cooking); }
+        .kanban-col.col-ready h2 { border-bottom-color: var(--status-ready); }
+
+        .order-card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); display: flex; flex-direction: column; position: relative;}
+        .order-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .table-badge { background: #2C2C2C; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 1.1rem; }
+        .order-time { color: var(--text-muted); font-size: 0.85rem; }
+
+        .timers-box { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap;}
+        .timer-badge { display: flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; }
+        .timer-active { background: rgba(231, 76, 60, 0.15); color: #E74C3C; border: 1px solid #E74C3C; }
+        .timer-gray { background: #2C2C2C; color: var(--text-muted); border: 1px solid #444; }
+
+        .order-items { flex-grow: 1; margin-bottom: 15px; }
+        .item-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 1rem; padding-bottom: 6px; border-bottom: 1px dashed #2C2C2C; }
+        .item-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .item-qty { font-weight: bold; color: var(--primary); margin-right: 8px; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        .action-btn { width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; margin-top: 0; }
+        .btn-confirm { background: var(--status-pending); color: #000; flex: 1; }
+        .btn-reject { background: transparent; color: #E74C3C; border: 1px solid #E74C3C; flex: 1; }
+        .btn-cooking { background: var(--status-cooking); color: #FFF; margin-top: 10px; }
+        .btn-ready { background: var(--status-ready); color: #000; margin-top: 10px; }
+
+        .empty-state { text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 0.95rem; }
+
+        /* МОДАЛКА АРХИВА */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 2000; }
+        .modal-content { background: var(--bg); padding: 30px; border-radius: 16px; width: 100%; max-width: 800px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--border);}
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-header h2 { margin: 0; }
+        .close-btn { background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 0; width: auto;}
+
+        .archive-stats { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; border: 1px solid var(--border);}
+        .archive-stats span { font-size: 1.5rem; font-weight: bold; color: var(--primary); }
+
+        .archive-list { overflow-y: auto; flex-grow: 1; padding-right: 10px;}
+        .archive-item { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start;}
+        .archive-meta { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 10px;}
+        .archive-meta span { color: var(--text); font-weight: bold; margin-left: 10px;}

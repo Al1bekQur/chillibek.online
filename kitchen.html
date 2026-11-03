@@ -1,80 +1,10 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html data-api-base="https://kali.pythonanywhere.com/api" lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gourmet Lounge - Терминал Персонала</title>
-    <style>
-        :root { --bg: #121212; --card: #1E1E1E; --primary: #E05A33; --text: #FFFFFF; --text-muted: #A0A0A0; --border: #2C2C2C; --status-pending: #F39C12; --status-cooking: #3498DB; --status-ready: #2ECC71; }
-        body { font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; }
-        
-        .login-container { background: var(--card); padding: 40px 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 100%; max-width: 350px; text-align: center; margin: 10vh auto; }
-        .login-container h2 { margin-top: 0; margin-bottom: 25px; }
-        input { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 1rem; background: #2C2C2C; color: white; }
-        input:focus { outline: none; border-color: var(--primary); }
-        button { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:active { transform: scale(0.98); }
-        .error-msg { color: #E74C3C; font-size: 0.9rem; margin-top: 10px; display: none; }
-
-        .kitchen-container { display: none; max-width: 1400px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 15px;}
-        .header h1 { margin: 0; font-size: 1.5rem; display: flex; align-items: center; }
-        .header .pulse { display: inline-block; width: 10px; height: 10px; background-color: #2ECC71; border-radius: 50%; margin-right: 10px; animation: blink 2s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-        
-        .user-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;}
-        .role-badge { background: #2C2C2C; padding: 6px 12px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; border: 1px solid #444; }
-        .action-btn-sm { background: #2C2C2C; width: auto; padding: 8px 15px; }
-        .archive-btn { background: var(--primary); }
-
-        .kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: start; }
-        @media (max-width: 900px) { .kanban-board { grid-template-columns: 1fr; } }
-        
-        .kanban-col { background: #181818; border-radius: 16px; padding: 15px; border: 1px solid var(--border); min-height: 500px; }
-        .kanban-col h2 { margin-top: 0; font-size: 1.2rem; text-align: center; padding-bottom: 15px; border-bottom: 2px solid var(--border); }
-        .kanban-col.col-pending h2 { border-bottom-color: var(--status-pending); }
-        .kanban-col.col-cooking h2 { border-bottom-color: var(--status-cooking); }
-        .kanban-col.col-ready h2 { border-bottom-color: var(--status-ready); }
-
-        .order-card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); display: flex; flex-direction: column; position: relative;}
-        .order-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .table-badge { background: #2C2C2C; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 1.1rem; }
-        .order-time { color: var(--text-muted); font-size: 0.85rem; }
-        
-        .timers-box { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap;}
-        .timer-badge { display: flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; }
-        .timer-active { background: rgba(231, 76, 60, 0.15); color: #E74C3C; border: 1px solid #E74C3C; }
-        .timer-gray { background: #2C2C2C; color: var(--text-muted); border: 1px solid #444; }
-        
-        .order-items { flex-grow: 1; margin-bottom: 15px; }
-        .item-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 1rem; padding-bottom: 6px; border-bottom: 1px dashed #2C2C2C; }
-        .item-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-        .item-qty { font-weight: bold; color: var(--primary); margin-right: 8px; }
-        
-        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
-        .action-btn { width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; margin-top: 0; }
-        .btn-confirm { background: var(--status-pending); color: #000; flex: 1; }
-        .btn-reject { background: transparent; color: #E74C3C; border: 1px solid #E74C3C; flex: 1; }
-        .btn-cooking { background: var(--status-cooking); color: #FFF; margin-top: 10px; }
-        .btn-ready { background: var(--status-ready); color: #000; margin-top: 10px; }
-        
-        .empty-state { text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 0.95rem; }
-
-        /* МОДАЛКА АРХИВА */
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 2000; }
-        .modal-content { background: var(--bg); padding: 30px; border-radius: 16px; width: 100%; max-width: 800px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--border);}
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .modal-header h2 { margin: 0; }
-        .close-btn { background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 0; width: auto;}
-        
-        .archive-stats { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; border: 1px solid var(--border);}
-        .archive-stats span { font-size: 1.5rem; font-weight: bold; color: var(--primary); }
-        
-        .archive-list { overflow-y: auto; flex-grow: 1; padding-right: 10px;}
-        .archive-item { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start;}
-        .archive-meta { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 10px;}
-        .archive-meta span { color: var(--text); font-weight: bold; margin-left: 10px;}
-    </style>
+    <link rel="stylesheet" href="./restaurant-kitchen.css">
 </head>
 <body>
 
@@ -82,7 +12,7 @@
         <h2>Терминал Персонала</h2>
         <input type="text" id="username" placeholder="Логин (waiter или chef)">
         <input type="password" id="password" placeholder="Пароль">
-        <button onclick="login()">Войти</button>
+        <button data-action-click="a1">Войти</button>
         <div class="error-msg" id="loginError">Неверный логин или пароль</div>
     </div>
 
@@ -91,8 +21,8 @@
             <h1><span class="pulse"></span>Рабочая смена</h1>
             <div class="user-info">
                 <span class="role-badge" id="roleBadge">Роль</span>
-                <button class="action-btn-sm archive-btn" onclick="openArchive()">📁 Архив</button>
-                <button class="action-btn-sm" onclick="logout()">Выйти</button>
+                <button class="action-btn-sm archive-btn" data-action-click="a2">📁 Архив</button>
+                <button class="action-btn-sm" data-action-click="a3">Выйти</button>
             </div>
         </div>
         
@@ -116,7 +46,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Архив заказов</h2>
-                <button class="close-btn" onclick="closeArchive()">✕</button>
+                <button class="close-btn" data-action-click="a4">✕</button>
             </div>
             <div class="archive-stats">
                 Всего обслужено за сегодня: <span id="archiveCount">0</span>
@@ -126,234 +56,6 @@
     </div>
 
     <script src="./restaurant-dom.js"></script>
-    <script>
-        const API_URL = 'https://kali.pythonanywhere.com/api';
-        function apiFetch(path, options = {}) {
-            const headers = new Headers(options.headers || {});
-            const token = sessionStorage.getItem('staffToken');
-            if (token) headers.set('Authorization', `Bearer ${token}`);
-            return fetch(`${API_URL}${path}`, { ...options, headers }).then(response => {
-                if (response.status === 401 && path !== '/staff/login') {
-                    sessionStorage.removeItem('staffToken');
-                    window.location.reload();
-                }
-                return response;
-            });
-        }
-        const D = window.RestaurantDOM;
-        let fetchInterval;
-        let timerInterval;
-        let currentUserRole = ''; 
-
-        function parseDate(dateStr) {
-            if (typeof dateStr !== 'string' || !dateStr) return null;
-            const date = new Date(dateStr.replace(' ', 'T') + 'Z');
-            return Number.isFinite(date.getTime()) ? date : null;
-        }
-
-        function formatDateTime(dateStr) {
-            const d = parseDate(dateStr);
-            if (!d) return '';
-            const hh = d.getHours().toString().padStart(2, '0');
-            const mm = d.getMinutes().toString().padStart(2, '0');
-            const DD = d.getDate().toString().padStart(2, '0');
-            const MM = (d.getMonth() + 1).toString().padStart(2, '0');
-            const YY = d.getFullYear().toString().slice(2);
-            return `${hh}:${mm} | ${DD}.${MM}.${YY}`;
-        }
-        
-        function formatTime(dateStr) {
-            const d = parseDate(dateStr);
-            if (!d) return '';
-            const hh = d.getHours().toString().padStart(2, '0');
-            const mm = d.getMinutes().toString().padStart(2, '0');
-            return `${hh}:${mm}`;
-        }
-
-        function calcDuration(startStr, endStr) {
-            const start = parseDate(startStr);
-            const end = endStr ? parseDate(endStr) : new Date();
-            if (!start || !end) return "00:00";
-            let diffSec = Math.floor((end - start) / 1000);
-            if (diffSec < 0) diffSec = 0;
-            const m = Math.floor(diffSec / 60).toString().padStart(2, '0');
-            const s = (diffSec % 60).toString().padStart(2, '0');
-            return `${m}:${s}`;
-        }
-
-        async function login() {
-            sessionStorage.removeItem('staffToken');
-            const user = document.getElementById('username').value;
-            const pass = document.getElementById('password').value;
-            const err = document.getElementById('loginError');
-            err.style.display = 'none';
-            if (!user || !pass) { err.innerText = "Заполните все поля!"; err.style.display = 'block'; return; }
-
-            try {
-                const res = await apiFetch('/staff/login', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: user, password: pass })
-                });
-                const data = await res.json();
-                
-                if (res.ok && data.success) {
-                    if (data.token) sessionStorage.setItem('staffToken', data.token);
-                    currentUserRole = data.role; 
-                    document.getElementById('loginScreen').style.display = 'none';
-                    document.getElementById('kitchenPanel').style.display = 'block';
-                    
-                    const roleText = currentUserRole === 'waiter' ? '👤 Официант' : (currentUserRole === 'chef' ? '👨‍🍳 Повар' : 'Админ');
-                    document.getElementById('roleBadge').innerText = roleText;
-
-                    loadOrders();
-                    fetchInterval = setInterval(loadOrders, 3000);
-                    timerInterval = setInterval(updateTickers, 1000); 
-                } else {
-                    err.innerText = data.message || "Доступ запрещен.";
-                    err.style.display = 'block';
-                }
-            } catch (e) { err.innerText = "Ошибка сервера."; err.style.display = 'block'; }
-        }
-
-        function logout() {
-            sessionStorage.removeItem('staffToken');
-            clearInterval(fetchInterval); clearInterval(timerInterval);
-            currentUserRole = ''; document.getElementById('username').value = ''; document.getElementById('password').value = '';
-            document.getElementById('kitchenPanel').style.display = 'none'; document.getElementById('loginScreen').style.display = 'block';
-        }
-
-        async function loadOrders() {
-            try {
-                const res = await apiFetch('/orders');
-                const orders = await res.json();
-                renderOrders(orders);
-                updateTickers(); 
-            } catch (e) { console.error("Ошибка загрузки заказов:", e); }
-        }
-
-        function timerBadge(label, value, className, start = '') {
-            const badge = D.el('div', `timer-badge ${className}`, label);
-            badge.append(D.el('span', '', value));
-            if (start) badge.dataset.start = start;
-            return badge;
-        }
-
-        function renderOrders(records) {
-            const orders = D.orders(records);
-            const lists = Object.fromEntries(['pending', 'cooking', 'ready'].map(status =>
-                [status, document.getElementById(`list-${status}`)]));
-            Object.values(lists).forEach(list => list.replaceChildren());
-            orders.forEach(order => {
-                if (!lists[order.status]) return;
-                const card = D.el('div', 'order-card');
-                const header = D.el('div', 'order-header');
-                header.append(D.el('div', 'table-badge', `Стол ${order.table_number}`),
-                    D.el('div', 'order-time', `#${order.id} • ${formatTime(order.created_at)}`));
-                const timers = D.el('div', 'timers-box');
-                const items = D.el('div', 'order-items');
-                order.items.forEach(item => {
-                    const row = D.el('div', 'item-row');
-                    const content = D.el('span');
-                    content.append(D.el('span', 'item-qty', `${item.qty}x`), document.createTextNode(` ${item.name}`));
-                    row.append(content); items.append(row);
-                });
-                let actions;
-                const serving = ['admin', 'waiter'].includes(currentUserRole);
-                if (order.status === 'pending') {
-                    timers.append(timerBadge('Ожидание: ', '00:00', 'timer-active', order.created_at));
-                    actions = D.el('div', serving ? 'btn-group' : 'empty-state');
-                    if (serving) actions.append(
-                        D.button('👍 Одобрить', 'action-btn btn-confirm', () => updateOrderStatus(order.id, 'cooking')),
-                        D.button('❌ Отклонить', 'action-btn btn-reject', () => rejectOrder(order.id)));
-                    else actions.textContent = 'Ждем официанта';
-                } else {
-                    timers.append(timerBadge('Одобрен за: ', calcDuration(order.created_at, order.approved_at), 'timer-gray'));
-                    if (order.status === 'cooking') {
-                        timers.append(timerBadge('Готовка: ', '00:00', 'timer-active', order.approved_at));
-                        actions = ['admin', 'chef'].includes(currentUserRole)
-                            ? D.button('✅ Завершить (Готово)', 'action-btn btn-cooking', () => updateOrderStatus(order.id, 'ready'))
-                            : D.el('div', 'empty-state', 'Готовится поваром...');
-                    } else {
-                        timers.append(timerBadge('Приготовлен за: ', calcDuration(order.approved_at, order.ready_at), 'timer-gray'));
-                        actions = serving
-                            ? D.button('🍽️ Отдано гостю', 'action-btn btn-ready', () => updateOrderStatus(order.id, 'completed'))
-                            : D.el('div', 'empty-state', 'Ждем забор официантом');
-                    }
-                }
-                card.append(header, timers, items, actions); lists[order.status].append(card);
-            });
-            for (const [status, message] of Object.entries({pending: 'Новых заказов нет', cooking: 'На кухне пусто', ready: 'Все выдано'})) {
-                if (!lists[status].childElementCount) lists[status].append(D.el('div', 'empty-state', message));
-            }
-        }
-
-        function updateTickers() {
-            document.querySelectorAll('.timer-active').forEach(badge => {
-                const startStr = badge.getAttribute('data-start');
-                const span = badge.querySelector('span');
-                if (startStr && span) {
-                    span.innerText = calcDuration(startStr, null);
-                }
-            });
-        }
-
-        async function updateOrderStatus(orderId, newStatus) {
-            if (!D.validId(orderId) || !['cooking', 'ready', 'completed'].includes(newStatus)) return;
-            try {
-                const res = await apiFetch(`/orders/${orderId}`, {
-                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: newStatus })
-                });
-                if (res.ok) loadOrders(); 
-            } catch (e) { alert("Ошибка при обновлении статуса."); }
-        }
-
-        // НОВАЯ ФУНКЦИЯ: Удаление заказа официантом
-        async function rejectOrder(orderId) {
-            if (!D.validId(orderId)) return;
-            if (!confirm("Вы уверены, что хотите отклонить этот заказ? Он исчезнет навсегда.")) return;
-            try {
-                const res = await apiFetch(`/orders/${orderId}`, {
-                    method: 'DELETE'
-                });
-                if (res.ok) loadOrders(); // Мгновенно обновляем интерфейс
-            } catch (e) { alert("Ошибка при отклонении заказа."); }
-        }
-
-        // --- ЛОГИКА АРХИВА ---
-        async function openArchive() {
-            document.getElementById('archiveModal').style.display = 'flex';
-            try {
-                const res = await apiFetch('/orders/archive');
-                if (!res.ok) throw new Error('Archive unavailable.');
-                renderArchive(await res.json());
-            } catch (e) { alert('Ошибка загрузки архива'); }
-        }
-
-        function renderArchive(records) {
-            const orders = D.orders(records);
-            document.getElementById('archiveCount').textContent = String(orders.length);
-            const list = document.getElementById('archiveList'); list.replaceChildren();
-            if (!orders.length) list.append(D.el('div', 'empty-state', 'Архив пуст. Вы еще не завершили ни одного заказа.'));
-            orders.forEach(order => {
-                const row = D.el('div', 'archive-item');
-                const details = D.el('div'); details.style.flexGrow = '1'; details.style.marginRight = '15px';
-                const table = D.el('div', 'table-badge', `Стол ${order.table_number}`);
-                table.style.display = 'inline-block'; table.style.marginBottom = '8px';
-                details.append(table, D.el('div', 'archive-meta', formatDateTime(order.created_at)),
-                    D.el('div', '', order.items.map(item => `${item.qty}x ${item.name}`).join(', ')));
-                const totals = D.el('div'); totals.style.textAlign = 'right'; totals.style.minWidth = '120px';
-                const price = D.el('div', '', `${order.total_price} ₸`);
-                price.style.color = 'var(--primary)'; price.style.fontWeight = 'bold'; price.style.fontSize = '1.1rem'; price.style.marginBottom = '5px';
-                const timer = timerBadge('Итог: ', calcDuration(order.created_at, order.ready_at), 'timer-gray');
-                timer.style.display = 'inline-flex'; totals.append(price, timer);
-                row.append(details, totals); list.append(row);
-            });
-        }
-
-        function closeArchive() {
-            document.getElementById('archiveModal').style.display = 'none';
-        }
-    </script>
+    <script src="./restaurant-kitchen.js"></script>
 </body>
 </html>

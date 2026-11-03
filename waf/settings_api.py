@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_v
 from .dashboard import SESSION_COOKIE, _is_authenticated, _serializer, require_dashboard_auth
 from .policy import Policy, PolicyStore, PolicyUpdate, ResetRequest, RevisionConflict
 from .enforcement import staff_policy
+from .csp_policy import coverage
 
 
 ASSETS = Path(__file__).resolve().parents[1] / "settings"
@@ -85,7 +86,7 @@ def settings_router(settings, store: PolicyStore):
         return {
             **snapshot,
             "csrf_token": _serializer(settings).dumps({"purpose": "settings-csrf", "session": csrf(request)}),
-            "defaults": Policy().model_dump(),
+            "defaults": Policy().model_dump(mode='json'),
             "capabilities": {
                 "allow_disabled_mode": settings.allow_disabled_mode,
                 "production_login_guard_required": not settings.allow_disabled_mode,
@@ -108,6 +109,7 @@ def settings_router(settings, store: PolicyStore):
             },
             "blocks": blocks,
             "block_history": store.block_history(),
+            "csp_coverage": coverage(policy, settings),
         }
 
     @router.get("/waf-api/settings")

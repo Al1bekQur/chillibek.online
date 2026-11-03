@@ -125,7 +125,7 @@ try {
     await waitFor(`${enabled(label)} && ${checked(label)} === 'false'`);
     const saved = await evaluate(snapshot);
     assert.equal(saved.policy[key], changed);
-    assert.deepEqual(Object.keys(before.policy).filter(name => before.policy[name] !== saved.policy[name]), [key]);
+    assert.deepEqual(Object.keys(before.policy).filter(name => JSON.stringify(before.policy[name]) !== JSON.stringify(saved.policy[name])), [key]);
     // The marker disappears only when a new page has actually loaded; this avoids
     // accidentally checking the old DOM while the browser is still reloading.
     await evaluate('window.__wafReloadMarker = true');

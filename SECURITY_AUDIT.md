@@ -4,6 +4,10 @@ Implementation update: A01/A02 input failures and A06 dynamic restaurant renderi
 are addressed in [XSS_FIX_VERIFICATION.md](XSS_FIX_VERIFICATION.md). This audit
 remains a historical account of its stated baseline, including its line references.
 CSP and the other deferred audit findings were not implemented in that stage.
+Subsequent CSP work and the tested resolution path for A05 are documented in
+[CSP_DEPLOYMENT.md](CSP_DEPLOYMENT.md) and [CSP_VERIFICATION.md](CSP_VERIFICATION.md).
+Live frontend coverage remains unverified and requires manual migration; the
+audit below retains its original baseline and line numbers.
 
 Audit date: **2026-11-03**. Source baseline: **`b27aa6a76a6163fe37d34128bcb7a80466039e54`**, branch `dev`.
 

@@ -31,7 +31,8 @@ def framing_error(scope, settings):
         length = seen[b'content-length'][0]
         if not re.fullmatch(rb'[0-9]{1,12}', length):
             return 400
-        if int(length) > settings.hard_max_request_bytes:
+        limit = min(settings.hard_max_request_bytes, settings.csp_report_max_bytes) if scope.get('path') == '/csp-report' else settings.hard_max_request_bytes
+        if int(length) > limit:
             return 413
     if b'content-encoding' in seen and seen[b'content-encoding'] != [b'identity']:
         return 415  # No decompression bomb or opaque compressed-body inspection bypass.
@@ -82,10 +83,12 @@ class ProtocolGuard:
                         event = await receive()
                         if event['type'] == 'http.disconnect':
                             return
-                        body.extend(event.get('body', b''))
-                        if len(body) > self.settings.hard_max_request_bytes:
+                        chunk = event.get('body', b'')
+                        limit = min(self.settings.hard_max_request_bytes, self.settings.csp_report_max_bytes) if scope.get('path') == '/csp-report' else self.settings.hard_max_request_bytes
+                        if len(body) + len(chunk) > limit:
                             error = 413
                             break
+                        body.extend(chunk)
                         if not event.get('more_body', False):
                             break
                 await asyncio.wait_for(read_body(), self.settings.body_timeout_seconds)

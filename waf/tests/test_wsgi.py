@@ -199,7 +199,7 @@ def test_logging_off_cannot_disable_audit_or_staff_auth(staging):
     state = read(client)
     reset = client.post('/waf-api/settings/reset', base_url='https://staging.test',
                         json={'revision': state['revision']}, headers={'X-CSRF-Token': state['csrf_token']})
-    assert reset.status_code == 200 and reset.json['policy'] == Policy().model_dump()
+    assert reset.status_code == 200 and reset.json['policy'] == Policy().model_dump(mode='json')
 
 
 def test_pythonanywhere_trusted_client_ip_and_per_client_rate_limit(staging):
@@ -497,7 +497,7 @@ def test_every_control_hot_reload_persistence_and_independence(staging, field, c
     wrapper = protect_wsgi(restaurant, settings)
     client = StagingClient(wrapper, Response)
     existing_worker = protect_wsgi(restaurant, settings)
-    assert existing_worker.waf.state.policy_store.read()['policy'] == Policy().model_dump()
+    assert existing_worker.waf.state.policy_store.read()['policy'] == Policy().model_dump(mode='json')
     admin_login(client)
     baseline = read(client)['policy']
     assert probe_control(client, settings, field) == enabled_result

@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash
 
@@ -41,6 +41,14 @@ CSRF_COOKIE = "chillibek_waf_csrf"
 
 def dashboard_router(settings: WAFSettings) -> APIRouter:
     router = APIRouter()
+
+    @router.get('/dashboard/dashboard.js')
+    async def script():
+        return Response(_javascript(), media_type='text/javascript')
+
+    @router.get('/dashboard/dashboard.css')
+    async def stylesheet():
+        return Response(_css(), media_type='text/css')
 
     @router.get("/dashboard/login", response_class=HTMLResponse)
     async def login_page(request: Request) -> HTMLResponse:
@@ -349,7 +357,7 @@ def _login_html(configured: bool, csrf_token: str, settings_next: bool = False) 
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chillibek WAF Login</title>
-  <style>{_css()}</style>
+  <link rel="stylesheet" href="/dashboard/dashboard.css">
 </head>
 <body class="login-body">
   <main class="login-panel">
@@ -375,7 +383,7 @@ def _dashboard_html(csrf_token) -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chillibek WAF Dashboard</title>
-  <style>{_css()}</style>
+  <link rel="stylesheet" href="/dashboard/dashboard.css">
 </head>
 <body>
   <header class="topbar">
@@ -416,8 +424,9 @@ def _dashboard_html(csrf_token) -> str:
       <article class="panel wide"><h2>Recent Security Events</h2><div class="table-wrap"><table><thead><tr><th>Time</th><th>Decision</th><th>Method</th><th>Path</th><th>Status</th><th>Risk</th><th>Rules</th></tr></thead><tbody id="eventsBody"></tbody></table></div><div class="pager"><button id="prevPage">Prev</button><span id="pageInfo"></span><button id="nextPage">Next</button></div></article>
       <article class="panel"><h2>Detection Rules</h2><div id="rulesList" class="rules"></div></article>
     </section>
+    <section class="panel"><h2>CSP browser reports</h2><p id="cspNotice">Loading client-reported observations...</p><div class="table-wrap"><table><thead><tr><th>Received</th><th>Directive</th><th>Document path</th><th>Resource (redacted)</th><th>Disposition</th><th>Receipt revision</th></tr></thead><tbody id="cspReports"></tbody></table></div></section>
   </main>
-  <script>{_javascript()}</script>
+  <script src="/dashboard/dashboard.js"></script>
 </body>
 </html>"""
 
@@ -499,6 +508,17 @@ async function loadDashboard() {
 
   const rules = await fetch('/dashboard/api/rules').then(r => r.json());
   renderRules(rules.rules || [], rules.block_threshold, rules.mode);
+  const csp = await fetch('/dashboard/api/csp', {cache:'no-store'}).then(r => r.json());
+  document.getElementById('cspNotice').textContent = csp.notice + ' Effective CSP: ' + csp.coverage.effective_mode + '. GitHub Pages: ' + csp.coverage.github_pages;
+  const reports = document.getElementById('cspReports');
+  reports.replaceChildren();
+  for (const report of csp.reports || []) {
+    const row = document.createElement('tr');
+    for (const value of [report.timestamp, report.directive, report.document_path, report.blocked_resource, report.disposition, report.receipt_revision]) {
+      const cell = document.createElement('td'); cell.textContent = safeText(value); row.appendChild(cell);
+    }
+    reports.appendChild(row);
+  }
 }
 function renderCategories(categories) {
   const box = document.getElementById('categoryList');

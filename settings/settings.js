@@ -27,6 +27,13 @@
     ['login_max_lockout_seconds', 'Maximum lockout (seconds)', 30, 86400]
   ];
   const $ = id => document.getElementById(id);
+  const cspDirectives = ['script_src', 'style_src', 'img_src', 'connect_src', 'object_src', 'base_uri', 'frame_ancestors', 'form_action'];
+  for (const key of cspDirectives) {
+    const label = document.createElement('label'); label.textContent = key.replaceAll('_', '-');
+    const input = document.createElement('input'); input.id = `csp-${key}`; input.maxLength = 2048;
+    input.dataset.cspField = key; input.disabled = true;
+    label.appendChild(input); $('cspFields').appendChild(label);
+  }
   let snapshot = null;
   let busy = false;
   const switches = new Map();
@@ -78,6 +85,7 @@
     }
     $('save').disabled = $('reset').disabled = busy || !snapshot;
     $('refresh').disabled = busy;
+    for (const id of ['cspMode', 'cspTrustedTypes', 'cspSave', ...cspDirectives.map(key => `csp-${key}`)]) $(id).disabled = busy || !snapshot;
     for (const input of document.querySelectorAll('[data-policy-field]')) input.disabled = busy || !snapshot;
     for (const id of ['blockKind', 'blockValue', 'blockDuration', 'blockReason', 'createBlock']) $(id).disabled = busy || !snapshot;
     $('saveHint').textContent = busy ? 'Waiting for server confirmation…' : snapshot ? 'Policy changes are saved after server confirmation.' : 'A live connection is required to change settings.';
@@ -141,10 +149,17 @@
         !Number.isInteger(data.effective.request_size_bytes) ||
         !Number.isInteger(data.effective.hard_request_size_bytes) ||
         !Array.isArray(data.blocks) || data.blocks.some(item => typeof item.enforced !== 'boolean') ||
-        !Array.isArray(data.block_history)) {
+        !Array.isArray(data.block_history) || !data.csp_coverage || !data.policy.csp ||
+        !['enforce', 'off', 'report-only'].includes(data.policy.csp.mode) ||
+        cspDirectives.some(key => !Array.isArray(data.policy.csp[key]))) {
       throw new Error('The WAF returned an invalid policy.');
     }
     snapshot = data;
+    $('cspMode').value = data.policy.csp.mode;
+    $('cspTrustedTypes').checked = data.policy.csp.trusted_types;
+    $('cspEffective').textContent = `SERVED HTML: ${data.csp_coverage.effective_mode.toUpperCase()}`;
+    $('cspCoverage').textContent = `Management: ${data.csp_coverage.management}. Restaurant: ${data.csp_coverage.restaurant}. GitHub Pages: ${data.csp_coverage.github_pages}. Live production deployment: unverified.`;
+    for (const key of cspDirectives) $(`csp-${key}`).value = data.policy.csp[key].join(' ');
     for (const [key, {state, button}] of switches) {
       const configured = key === 'mode' ? data.policy.mode === 'block' : data.policy[key];
       const enabled = key === 'mode' ? configured : configured && data.policy.mode !== 'disabled';
@@ -188,6 +203,8 @@
   }
   function unknown() {
     snapshot = null;
+    $('cspEffective').textContent = 'UNKNOWN';
+    $('cspCoverage').textContent = 'Coverage not verified. GitHub Pages HTML is not covered by backend headers.';
     for (const {state, button} of switches.values()) {
       state.textContent = '—'; state.className = 'state unknown'; button.setAttribute('aria-checked', 'false');
     }
@@ -237,6 +254,8 @@
   }
   function policyFromForm() {
     const policy = {...snapshot.policy};
+    policy.csp = {...snapshot.policy.csp, mode: $('cspMode').value, trusted_types: $('cspTrustedTypes').checked};
+    for (const key of cspDirectives) policy.csp[key] = $(`csp-${key}`).value.trim().split(/\s+/);
     for (const [key] of fields) {
       const input = $(`field-${key}`);
       const value = input.valueAsNumber;
@@ -288,6 +307,10 @@
     if (policy) write(policy);
   });
   $('reset').addEventListener('click', () => write(null, true));
+  $('cspSave').addEventListener('click', () => {
+    if (!snapshot || busy) return;
+    const policy = policyFromForm(); if (policy) write(policy);
+  });
   $('refresh').addEventListener('click', () => refresh());
   window.addEventListener('focus', () => refresh(true));
   setInterval(updateBlockCountdowns, 1000);

@@ -1,0 +1,38 @@
+:root { --bg: #F4F6F8; --card: #FFFFFF; --primary: #E05A33; --text: #332B29; --text-muted: #857874; --border: #E1E4E8; }
+        body { font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .login-container { background: var(--card); padding: 40px 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); width: 100%; max-width: 350px; text-align: center; margin-top: 10vh; }
+        .login-container h2 { margin-top: 0; margin-bottom: 25px; }
+        input, select { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 1rem; background: #FAFBFC; transition: 0.2s; }
+        input:focus, select:focus { outline: none; border-color: var(--primary); background: #FFF; }
+        button { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:active { transform: scale(0.98); }
+        .error-msg { color: #dc3545; font-size: 0.9rem; margin-top: 10px; display: none; }
+        .admin-container { width: 100%; max-width: 900px; display: none; padding-bottom: 50px; }
+        .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 15px; }
+        .admin-header h2 { margin: 0; }
+        .header-controls { display: flex; gap: 15px; align-items: center; position: relative; }
+        .logout-btn { background: #E1E4E8; color: var(--text); width: auto; padding: 10px 20px; }
+        .search-box { position: relative; }
+        .search-box input { margin-bottom: 0; padding: 10px 15px; width: 250px; border-radius: 20px; }
+        .search-results { position: absolute; top: 110%; left: 0; width: 100%; background: var(--card); border-radius: 10px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); max-height: 300px; overflow-y: auto; z-index: 100; display: none; border: 1px solid var(--border); }
+        .search-result-item { padding: 12px 15px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .search-result-item:hover { background: #f8f9fa; }
+        .add-item-box { background: var(--card); padding: 25px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-bottom: 30px; }
+        .flex-row { display: flex; gap: 15px; }
+        .category-header { font-size: 1.2rem; font-weight: 800; margin: 30px 0 15px 0; color: var(--text); padding-bottom: 5px; border-bottom: 2px solid var(--primary); display: inline-block; }
+        .menu-list { background: var(--card); border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); overflow: hidden; margin-bottom: 20px; }
+        .menu-row { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid var(--border); }
+        .menu-row:last-child { border-bottom: none; }
+        .item-details { flex-grow: 1; }
+        .item-details h4 { margin: 0 0 5px 0; }
+        .item-details p { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
+        .row-controls { display: flex; gap: 10px; }
+        .edit-btn { background: #E1E4E8; color: var(--text); width: auto; padding: 8px 15px; font-size: 0.9rem; border-radius: 8px; }
+        .delete-btn { background: #ffe3e3; color: #dc3545; width: auto; padding: 8px 15px; font-size: 0.9rem; border-radius: 8px; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: var(--card); padding: 30px; border-radius: 16px; width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .modal-content h3 { margin-top: 0; }
+        .modal-actions { display: flex; gap: 15px; margin-top: 20px; }
+        .cancel-btn { background: #E1E4E8; color: var(--text); }
+[data-static-style="s1"] { margin-top: 0; }
+[data-static-style="s2"] { margin-bottom: 15px; }

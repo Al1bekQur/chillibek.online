@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 project_root = Path("/home/kali/chillibek.online")  # Replace with the VERIFIED checkout.
 sys.path.insert(0, str(project_root))
 load_dotenv("/home/kali/.config/chillibek-waf.env", override=False)
+# Optional CSP frontend migration: WAF_SERVE_FRONTEND=true in that reviewed
+# environment BEFORE imports. See CSP_DEPLOYMENT.md for static mapping review,
+# combined XSS/CSP release order, Pages gateways and schema-compatible rollback.
 
 # The secured backend can otherwise create a fresh default database. Require an
 # explicit verified database location for this cutover example before importing it.

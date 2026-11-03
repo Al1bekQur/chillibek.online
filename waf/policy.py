@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator, model_validator
+from .csp_policy import CSPPolicy
 
 
 class Policy(BaseModel):
@@ -27,6 +28,7 @@ class Policy(BaseModel):
     command_injection: StrictBool = True
     brute_force: StrictBool = True
     bot_detection: StrictBool = True
+    csp: CSPPolicy = CSPPolicy()
     rate_limit_requests: StrictInt = Field(default=120, ge=1, le=10000)
     rate_limit_window_seconds: StrictInt = Field(default=60, ge=1, le=3600)
     route_limit_requests: StrictInt = Field(default=90, ge=1, le=5000)
@@ -136,6 +138,11 @@ class PolicyStore:
                 started_at REAL NOT NULL, expires_at REAL, manual INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS active_blocks_expiry ON active_blocks(expires_at);
+            CREATE TABLE IF NOT EXISTS csp_reports (
+                id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL, directive TEXT NOT NULL,
+                document_path TEXT NOT NULL, blocked_resource TEXT NOT NULL,
+                disposition TEXT NOT NULL, receipt_revision INTEGER NOT NULL
+            );
         """)
         if not existed:
             connection.execute('INSERT OR IGNORE INTO policy VALUES (1, ?, 0, NULL, NULL)', (Policy().model_dump_json(),))
@@ -149,6 +156,7 @@ class PolicyStore:
         try:
             legacy = json.loads(raw)
             current_keys = set(Policy.model_fields)
+            pre_csp_keys = current_keys - {'csp'}
             new_fields = {
                 'bot_detection_limit', 'bot_detection_window_seconds',
                 'rate_limit_requests', 'rate_limit_window_seconds', 'route_limit_requests',
@@ -157,7 +165,7 @@ class PolicyStore:
                 'login_initial_lockout_seconds', 'login_lockout_multiplier',
                 'login_max_lockout_seconds',
             }
-            previous_keys = current_keys - new_fields
+            previous_keys = pre_csp_keys - new_fields
             oldest_keys = previous_keys - {'command_injection', 'brute_force', 'bot_detection'}
             numeric_policy_keys = {
                 'rate_limit_requests', 'rate_limit_window_seconds', 'route_limit_requests',
@@ -171,6 +179,8 @@ class PolicyStore:
                 frozenset(previous_keys), frozenset(previous_keys - numeric_policy_keys),
                 frozenset(oldest_keys), frozenset(older_keys),
                 frozenset(current_keys - {'command_injection', 'brute_force', 'bot_detection'}),
+                frozenset(pre_csp_keys),
+                frozenset(pre_csp_keys - {'command_injection', 'brute_force', 'bot_detection'}),
             }
             if isinstance(legacy, dict) and frozenset(legacy) in legacy_keys:
                 upgraded = Policy.model_validate({**Policy().model_dump(), **legacy})
@@ -195,7 +205,7 @@ class PolicyStore:
             stored = json.loads(row["value"])
             if not isinstance(stored, dict) or set(stored) != set(Policy.model_fields):
                 raise ValueError("Stored policy is incomplete.")
-            policy = Policy.model_validate(stored).model_dump()
+            policy = Policy.model_validate(stored).model_dump(mode='json')
         except ValueError:
             raise sqlite3.DatabaseError("Stored WAF policy is invalid.") from None
         return {
@@ -207,6 +217,17 @@ class PolicyStore:
     def read(self):
         with self.connect() as connection:
             return self._snapshot(connection)
+
+    def record_csp_reports(self, reports, revision):
+        with self.connect() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            connection.executemany('INSERT INTO csp_reports(timestamp,directive,document_path,blocked_resource,disposition,receipt_revision) VALUES (?,?,?,?,?,?)',
+                [(now(), r['directive'], r['document_path'], r['blocked_resource'], r['disposition'], revision) for r in reports])
+            connection.execute('DELETE FROM csp_reports WHERE id NOT IN (SELECT id FROM csp_reports ORDER BY id DESC LIMIT 1000)')
+
+    def csp_reports(self):
+        with self.connect() as connection:
+            return [dict(row) for row in connection.execute('SELECT * FROM csp_reports ORDER BY id DESC LIMIT 100')]
 
     def update(self, policy: Policy, revision: int, actor: str, action="update"):
         with self.connect() as connection:

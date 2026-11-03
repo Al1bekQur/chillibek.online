@@ -1,5 +1,11 @@
 # Chillibek WAF security implementation plan
 
+Implementation status: the earlier XSS/input stage is recorded in
+[XSS_FIX_VERIFICATION.md](XSS_FIX_VERIFICATION.md). Subsequent P2/P3 CSP delivery
+work is recorded in [CSP_DEPLOYMENT.md](CSP_DEPLOYMENT.md) and
+[CSP_VERIFICATION.md](CSP_VERIFICATION.md). The original plan below is historical;
+production migration and live coverage verification remain manual requirements.
+
 Prepared **2026-11-03**, against source baseline
 **`b27aa6a76a6163fe37d34128bcb7a80466039e54`** on `dev`.
 This document plans future work; **no listed fix, feature, production configuration

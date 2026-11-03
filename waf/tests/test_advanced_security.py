@@ -312,7 +312,9 @@ async def test_logout_csrf_safe_validation_and_security_headers(engine):
     assert (await client.post('/dashboard/login', data={'username':'synthetic-operator','password':'synthetic-password','csrf_token':csrf})).status_code == 303
     assert (await client.post('/dashboard/logout')).status_code == 403
     page = await client.get('/dashboard')
-    assert 'sha256-' in page.headers['content-security-policy']
+    assert "script-src 'self'" in page.headers['content-security-policy']
+    assert '<script src="/dashboard/dashboard.js"></script>' in page.text
+    assert '<script>' not in page.text
     assert page.headers['strict-transport-security'] == 'max-age=31536000'
     state = (await client.get('/waf-api/settings')).json()
     body = {'revision':state['revision'], 'policy':{**state['policy'], 'sql_injection':'synthetic-sensitive-input'}}

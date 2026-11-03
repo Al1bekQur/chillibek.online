@@ -72,6 +72,11 @@ engine/data until an authorized migration has been staged and backed up.
 
 ## Current URLs and coverage
 
+CSP release update: [CSP_DEPLOYMENT.md](CSP_DEPLOYMENT.md) adds opt-in restaurant
+HTML hosting through this same WSGI application. Until its separately approved
+migration, existing Pages restaurant documents remain outside backend CSP.
+The earlier topology below describes the original split-host release.
+
 | Component | URL / configuration |
 | --- | --- |
 | Production restaurant | `https://chillibek.online/`, `/admin.html`, `/kitchen.html` (GitHub Pages). |

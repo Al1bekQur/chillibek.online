@@ -10,7 +10,10 @@ Block denies, Monitor records/forwards, OFF does not call it. Invalid Unicode/JS
 remains mandatory PARSE-001 validation. Payload integers and URL IDs are bounded
 before conversion. Restaurant output uses DOM text/nodes independently of policy;
 customer order item payloads contain IDs/quantities, not stored menu markup.
-No CSP policy was added by this stage.
+CSP now uses the same PolicyStore for WAF-served HTML. See
+[CSP_DEPLOYMENT.md](CSP_DEPLOYMENT.md) for modes, document/route coverage,
+opt-in frontend hosting, reporting and manual Pages migration. Backend headers
+still do not protect existing GitHub Pages restaurant documents.
 
 ## Request pipeline and audit
 
@@ -18,12 +21,13 @@ No CSP policy was added by this stage.
 Managed WSGI server (verified client IP/scheme)
   -> ProtectedWSGI
   -> ProtocolGuard: framing and hard size/time/capacity ceilings
-  -> management authentication/audit OR restaurant proxy
-  -> one policy snapshot: inspection, rate/concurrency and bot checks
+  -> one policy snapshot
+  -> management authentication/audit OR opt-in fixed frontend OR restaurant proxy
+  -> proxy inspection, rate/concurrency and bot checks
   -> InProcessTransport: trusted Python environment handoff, no network forwarding
   -> Flask: protected-entry check, authentication and application validation
   -> login_guard: shared account/IP admission and credential outcome
-  -> WAF: outcome logging and response
+  -> WAF: outcome logging and response; snapshot-derived CSP on served HTML
 ```
 
 `ProtectedWSGI` replaces the upstream with the actual Flask callable. Forwarding

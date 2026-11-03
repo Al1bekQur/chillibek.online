@@ -39,6 +39,17 @@
         <div class="panel-heading"><div><h2 id="modules-title">Protection modules</h2><p>Changes apply immediately after the server confirms them.</p></div><span class="tag">LIVE POLICY</span></div>
         <div id="rules"></div>
       </section>
+      <section class="panel" aria-labelledby="csp-title">
+        <div class="panel-heading"><div><h2 id="csp-title">CSP Protection</h2><p>Controls HTML served by this WAF. Existing documents keep their response policy until reloaded. GitHub Pages HTML is not covered by backend headers.</p></div><span id="cspEffective" class="tag">UNKNOWN</span></div>
+        <div class="policy-fields">
+          <label>Configured CSP mode<select id="cspMode" disabled><option value="enforce">ON / Enforce</option><option value="off">OFF</option><option value="report-only">REPORT-ONLY</option></select></label>
+          <label>Trusted Types (support varies by browser)<input id="cspTrustedTypes" type="checkbox" disabled></label>
+        </div>
+        <p id="cspCoverage">Coverage not verified. Live production deployment has not been checked.</p>
+        <p>Space-separated exact HTTPS origins, 'self' or 'none'; data: is allowed for images only. No inline scripts, eval, wildcards or arbitrary directives. Script, style and connect sources must retain 'self' for management assets and API access. Master Monitor makes CSP Report-Only; Disabled makes CSP OFF.</p>
+        <div id="cspFields" class="policy-fields"></div>
+        <button id="cspSave" class="button primary" type="button" disabled>Save CSP policy</button>
+      </section>
       <section class="panel" aria-labelledby="thresholds-title">
         <div class="panel-heading"><div><h2 id="thresholds-title">Shared rate and login policy</h2><p>One validated policy snapshot governs inspection and staff login admission for each request.</p></div><span class="tag">PERSISTENT POLICY</span></div>
         <div id="policyFields" class="policy-fields"></div>

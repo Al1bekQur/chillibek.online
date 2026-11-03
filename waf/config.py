@@ -36,3 +36,5 @@ class WAFSettings:
     trusted_proxy_ips: tuple[str, ...] = tuple(
         part.strip() for part in os.getenv('WAF_TRUSTED_PROXY_IPS', '').split(',') if part.strip()
     )
+    serve_frontend: bool = os.getenv('WAF_SERVE_FRONTEND', 'false').lower() == 'true'
+    csp_report_max_bytes: int = 8192
