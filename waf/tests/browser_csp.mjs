@@ -38,7 +38,7 @@ async function intercept(event) {
     body:Buffer.from('window.__cspExternal=1').toString('base64')});
   if(url.origin==='https://images.unsplash.com') return command('Fetch.fulfillRequest',{
     requestId:event.requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:'image/png'}],
-    body:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1cAAAAASUVORK5CYII='});
+    body:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII='});
   unexpected.push(url.origin+url.pathname);
   return command('Fetch.failRequest',{requestId:event.requestId,errorReason:'BlockedByClient'});
 }

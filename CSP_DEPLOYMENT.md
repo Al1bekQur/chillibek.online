@@ -1,5 +1,10 @@
 # CSP architecture, migration and rollback
 
+For the combined release, use [RELEASE_PROCEDURE.md](RELEASE_PROCEDURE.md) and
+[RELEASE_VERIFICATION.md](RELEASE_VERIFICATION.md): they add verified artifact,
+backup/schema rehearsal, fast-forward update and exact publication commands.
+The architecture/policy details below remain applicable.
+
 Development baseline: `e99669a657a500da464cf4dbf56abeb64aec76f5`; this release
 includes that earlier, unpublished XSS/input fix. No production request, DNS
 change, deployment, account change or restaurant database operation was performed

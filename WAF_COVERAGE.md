@@ -1,5 +1,10 @@
 # Centralized WAF coverage
 
+Combined release readiness and measurable activation gates:
+[RELEASE_PROCEDURE.md](RELEASE_PROCEDURE.md),
+[RELEASE_VERIFICATION.md](RELEASE_VERIFICATION.md). Coverage is not established on
+production until the protected documents and API are actually activated/verified.
+
 Current architecture on `dev`. See [SETTINGS_DEPLOYMENT.md](SETTINGS_DEPLOYMENT.md)
 for configuration and manual deployment. Earlier phase reports are historical.
 No restaurant database migration is part of this change.

@@ -58,7 +58,7 @@ async function intercept(event) {
       responseHeaders, body: Buffer.from(await result.arrayBuffer()).toString('base64')});
   }
   if (url.origin === 'https://images.unsplash.com') {
-    return fulfill(event, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1cAAAAASUVORK5CYII=', 'base64'), 'image/png');
+    return fulfill(event, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=', 'base64'), 'image/png');
   }
   if (url.origin === frontOrigin && url.pathname === '/favicon.ico') return fulfill(event, '', 'image/x-icon');
   unexpected.push(url.origin + url.pathname);
@@ -157,11 +157,13 @@ try {
     await safeRendering();
   }
   pass('Admin UI stores six payload variants with XSS OFF without executing them');
+  assert.ok(saved.every(record => record.image_url === 'https://images.unsplash.com/browser'));
   await evaluate(`handleSearch('Browser'); document.querySelector('.search-result-item').click()`);
   assert.equal(await evaluate(`document.getElementById('editDesc').value`), saved[0].description);
   saved[0].description += ' edited';
-  await evaluate(`document.getElementById('editDesc').value=${JSON.stringify(saved[0].description)};saveEdit()`);
-  await waitFor(`globalMenuData.find(item => item.id === ${saved[0].id}).description === ${JSON.stringify(saved[0].description)}`);
+  saved[0].image_url = 'https://images.unsplash.com/edited-browser?release=image';
+  await evaluate(`document.getElementById('editDesc').value=${JSON.stringify(saved[0].description)};document.getElementById('editImg').value=${JSON.stringify(saved[0].image_url)};saveEdit()`);
+  await waitFor(`globalMenuData.find(item => item.id === ${saved[0].id}).description === ${JSON.stringify(saved[0].description)} && globalMenuData.find(item => item.id === ${saved[0].id}).image_url === ${JSON.stringify(saved[0].image_url)}`);
   await safeRendering(); pass('Search, edit modal and saved descriptions remain literal text');
   await policy({xss: true});
   const blocked = await fetch(apiOrigin + '/api/menu?probe=' + encodeURIComponent('<svg onload=alert(1)>'));
@@ -177,6 +179,11 @@ try {
   }
   assert.equal(await evaluate(`document.getElementById('btn-container-${legacy.id}').closest('.menu-item').querySelector('img').hasAttribute('src')`), false);
   await safeRendering(); pass(`Stored payloads stay inert in menu cards and details with XSS ON; CSP ${hosted ? 'enforced' : 'absent'}`);
+  const image = `document.getElementById('btn-container-${saved[0].id}').closest('.menu-item').querySelector('img')`;
+  assert.equal(await evaluate(`${image}.src`), saved[0].image_url);
+  await evaluate(`closeDetails();${image}.scrollIntoView()`);
+  await waitFor(`${image}.complete && ${image}.naturalWidth > 0`);
+  pass('Assigned and edited approved image URLs persist and load in the restaurant browser');
   const purchased = saved[2];
   await evaluate(`closeDetails();document.getElementById('btn-container-${purchased.id}').querySelector('button').click()`);
   assert.equal(await evaluate(`document.querySelector('.cart-item-name').textContent`), purchased.name);

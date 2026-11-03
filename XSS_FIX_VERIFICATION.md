@@ -1,5 +1,11 @@
 # XSS rendering and input-processing fixes
 
+This report records the earlier XSS-only stage. The current combined XSS/CSP
+release order, complete asset set and rollback are in
+[RELEASE_PROCEDURE.md](RELEASE_PROCEDURE.md), with current results in
+[RELEASE_VERIFICATION.md](RELEASE_VERIFICATION.md). Use that coordinated procedure
+instead of publishing only the four older frontend files listed below.
+
 Work on `dev`, starting from audit commit
 `1c62988c81626e811e2ffe11495ce23f71e09884`. The audit's A01/A02 and A06 references
 identify the original parser, integer and rendering paths. This release fixes

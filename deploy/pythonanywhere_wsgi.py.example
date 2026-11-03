@@ -19,23 +19,36 @@ load_dotenv("/home/kali/.config/chillibek-waf.env", override=False)
 
 # The secured backend can otherwise create a fresh default database. Require an
 # explicit verified database location for this cutover example before importing it.
-if not os.getenv("DATABASE_URL"):
+configured_database = None
+if os.getenv("DATABASE_URL"):
+    from sqlalchemy.engine import make_url
+    database_url = make_url(os.environ['DATABASE_URL'])
+    if database_url.get_backend_name() == 'sqlite':
+        configured_database = database_url.database
+else:
     configured_database = os.getenv("DATABASE_PATH")
+if not os.getenv('DATABASE_URL') or database_url.get_backend_name() == 'sqlite':
     if not configured_database or not Path(configured_database).is_absolute() or not Path(configured_database).is_file():
         raise RuntimeError("Set DATABASE_URL or a verified existing absolute DATABASE_PATH before cutover.")
 
+# Preserve VERIFIED existing runtime paths; do not override WAF_POLICY_PATH with
+# a guessed directory, create an empty policy, or move state into a new checkout.
+policy_path = Path(os.environ['WAF_POLICY_PATH'])
+event_log = Path(os.environ['WAF_EVENT_LOG_PATH'])
+if not policy_path.is_absolute() or not policy_path.is_file() or not event_log.is_absolute():
+    raise RuntimeError('Require the existing absolute policy file and verified event-log path.')
+if event_log.resolve() in {policy_path.resolve(), Path(configured_database).resolve() if configured_database else None}:
+    raise RuntimeError('Event logging must not write into a database file.')
+
 # Keep the account's EXISTING Flask import here if adding inspection only.
-# Use this secured backend import only after the database and staff frontend
-# compatibility cutover in PYTHONANYWHERE_WAF.md has been approved and staged.
+# Use this secured backend import only after schema preflight and the coordinated
+# cutover in RELEASE_PROCEDURE.md have been approved and staged.
 from backend.server import app as restaurant
 from waf.config import WAFSettings
 from waf.wsgi import protect_wsgi
 
-# Explicit paths avoid accidentally resetting policy when a checkout is replaced.
-# Do NOT create a new empty policy if there is already an approved policy database.
-runtime = Path("/home/kali/.local/share/chillibek-waf")
-settings = replace(WAFSettings(), policy_path=runtime / "policy.sqlite3",
-                   log_path=runtime / "events.log", dashboard_secure_cookies=True)
+settings = replace(WAFSettings(), policy_path=policy_path,
+                   log_path=event_log, dashboard_secure_cookies=True)
 application = protect_wsgi(restaurant, settings, trust_pythonanywhere_proxy=True)
 
 # Never export the raw `restaurant` as `application`; never call app.run()/uvicorn here.
