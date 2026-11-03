@@ -17,6 +17,7 @@ from flask import Flask, abort, current_app, g, jsonify, request
 from flask_cors import CORS
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.routing import IntegerConverter, ValidationError as RoutingValidationError
 from sqlalchemy.exc import IntegrityError
 
 from waf.policy import Policy, PolicyStore
@@ -50,6 +51,19 @@ CATEGORIES = {"breakfasts", "salads", "soups", "main", "pizza", "snacks", "drink
 ROLES = {"admin", "waiter", "chef"}
 ORDER_STATUSES = {"pending", "cooking", "ready", "completed"}
 MENU_FIELDS = {"category", "name", "description", "weight", "price", "image_url"}
+MAX_INTEGER_TEXT_LENGTH = 32  # Allows ordinary zero padding without unbounded conversion.
+
+
+class DatabaseIDConverter(IntegerConverter):
+    def to_python(self, value):
+        # Routing happens before before_request. Bound conversion here too,
+        # including the signed 64-bit SQLite binding range, not just in views.
+        if len(value) > MAX_INTEGER_TEXT_LENGTH:
+            raise RoutingValidationError()
+        number = super().to_python(value)
+        if number > 9_223_372_036_854_775_807:
+            raise RoutingValidationError()
+        return number
 
 MENU_SEED = [
     ("breakfasts", "Сырники с ягодами", "Нежные сырники из фермерского творога со сметаной и свежими ягодами.", "220г", 2100, "https://images.unsplash.com/photo-1590137876181-2a5a7e340308?w=500&q=80"),
@@ -97,7 +111,7 @@ def _bounded_string(value, field, maximum, *, required=True):
     value = value.strip()
     if required and not value:
         abort(400, description=f"{field} is required.")
-    if len(value) > maximum or any(ord(char) < 32 for char in value):
+    if len(value) > maximum or any(ord(char) < 32 or 0xD800 <= ord(char) <= 0xDFFF for char in value):
         abort(400, description=f"{field} is invalid.")
     return value
 
@@ -107,7 +121,7 @@ def _integer(value, field, minimum, maximum):
         abort(400, description=f"{field} must be an integer.")
     if isinstance(value, int):
         number = value
-    elif isinstance(value, str) and re.fullmatch(r"[0-9]+", value):
+    elif isinstance(value, str) and len(value) <= MAX_INTEGER_TEXT_LENGTH and re.fullmatch(r"[0-9]+", value):
         number = int(value)
     else:
         abort(400, description=f"{field} must be an integer.")
@@ -192,6 +206,7 @@ def create_app(test_config=None):
     database_path = os.getenv("DATABASE_PATH", "instance/chillibek.sqlite3")
 
     app = Flask(__name__)
+    app.url_map.converters['int'] = DatabaseIDConverter
     app.config.from_mapping(
         SECRET_KEY=secret_key,
         DATABASE_URL=database_url,
@@ -287,7 +302,8 @@ def create_app(test_config=None):
             abort(400, description="Only username and password are accepted.")
         username = _bounded_string(data.get("username"), "username", 80).lower()
         password = data.get("password")
-        if not isinstance(password, str) or not password or len(password) > 256:
+        if (not isinstance(password, str) or not password or len(password) > 256 or
+                any(0xD800 <= ord(char) <= 0xDFFF for char in password)):
             abort(400, description="A valid password is required.")
         context = request.environ.get(CONTEXT_KEY)
         policy_store = context.store if context else app.config["SECURITY_POLICY_STORE"]
@@ -400,8 +416,7 @@ def create_app(test_config=None):
         if "total_price" in data:
             _integer(data["total_price"], "total_price", 0, 5_500_000_000)
         table_number = _bounded_string(data.get("table_number"), "table_number", 2)
-        if not table_number.isdigit() or not 1 <= int(table_number) <= 15:
-            abort(400, description="table_number must be between 1 and 15.")
+        _integer(table_number, 'table_number', 1, 15)
         items = data.get("items")
         if not isinstance(items, list) or not 1 <= len(items) <= 50:
             abort(400, description="Order must contain between 1 and 50 items.")

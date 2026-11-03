@@ -35,7 +35,7 @@
         .floating-cart { position: fixed; bottom: 20px; right: 20px; background: var(--accent); width: 60px; height: 60px; border-radius: 30px; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(224, 90, 51, 0.4); cursor: pointer; transition: 0.3s; z-index: 1000; display: none; }
         .floating-cart svg { width: 28px; fill: white; }
         .cart-badge { position: absolute; top: 0; right: 0; background: #332B29; color: white; font-size: 0.75rem; font-weight: bold; width: 22px; height: 22px; border-radius: 11px; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); }
-        
+
         /* Модалки */
         .cart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; display: none; flex-direction: column; justify-content: flex-end; }
         .cart-content { background: var(--card-bg); border-radius: 25px 25px 0 0; padding: 25px; max-height: 85vh; overflow-y: auto; animation: slideUp 0.3s ease-out; position: relative; touch-action: pan-y; }
@@ -46,16 +46,16 @@
         .cart-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #F0EBE1; padding-bottom: 15px; }
         .cart-item-name { font-weight: 700; font-size: 1rem; margin-bottom: 5px; }
         .cart-item-price { color: var(--text-muted); font-size: 0.9rem; }
-        
+
         .summary-box { background: #F9F6F0; border-radius: 15px; padding: 15px; margin-top: 20px; margin-bottom: 15px; }
         .summary-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.95rem; color: var(--text-muted); }
         .summary-row.total { border-top: 1px dashed #EAE3D9; margin-top: 10px; padding-top: 10px; font-size: 1.3rem; font-weight: 800; color: var(--text-main); }
-        
+
         /* Стили для выбора столика */
         .table-selector-box { background: #F4EFE7; border-radius: 15px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .table-selector-label { font-weight: 700; color: var(--text-main); }
         .table-select { background: var(--card-bg); border: 1px solid #EAE3D9; padding: 10px 15px; border-radius: 10px; font-size: 1rem; font-weight: bold; color: var(--accent); outline: none; }
-        
+
         .order-btn { width: 100%; background: var(--accent); color: white; border: none; padding: 16px; border-radius: 15px; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
         .order-btn:active { transform: scale(0.98); }
 
@@ -112,7 +112,7 @@
                 <button class="close-cart" onclick="toggleCart()">✕</button>
             </div>
             <div id="cartItemsList"></div>
-            
+
             <div class="summary-box">
                 <div class="summary-row"><span>Подытог:</span><span id="subtotalPrice">0 ₸</span></div>
                 <div class="summary-row"><span>Обслуживание (10%):</span><span id="servicePrice">0 ₸</span></div>
@@ -130,7 +130,7 @@
                     <option value="13">Стол 13</option><option value="14">Стол 14</option><option value="15">Стол 15</option>
                 </select>
             </div>
-            
+
             <button class="order-btn" onclick="submitOrder()">Оформить заказ</button>
         </div>
     </div>
@@ -155,88 +155,81 @@
         </div>
     </div>
 
+    <script src="./restaurant-dom.js"></script>
     <script>
         const API_URL = 'https://kali.pythonanywhere.com/api';
-        function escapeHtml(value) {
-            return String(value ?? '').replace(/[&<>"']/g, char => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-            })[char]);
-        }
+        const D = window.RestaurantDOM;
         const categories = ['breakfasts', 'salads', 'soups', 'main', 'pizza', 'snacks', 'drinks'];
-        let menuData = []; 
-        let cart = {}; 
-        let currentDetailsId = null; 
+        let menuData = [];
+        let cart = Object.create(null);
+        let currentDetailsId = null;
 
         async function loadMenu() {
             try {
                 const res = await fetch(`${API_URL}/menu`);
-                menuData = await res.json();
+                if (!res.ok) throw new Error('Menu unavailable.');
+                menuData = D.menu(await res.json());
                 renderMenu();
             } catch (e) { alert("Ошибка загрузки меню."); }
         }
 
-        function renderMenu() {
-            categories.forEach(cat => document.getElementById(`items-${cat}`).innerHTML = "");
-            menuData.forEach(item => {
-                const qty = cart[item.id] || 0;
-                let btnHtml = qty === 0 
-                    ? `<button class="add-btn" onclick="updateCart(${item.id}, 1); event.stopPropagation();">＋</button>`
-                    : `<div class="qty-control" onclick="event.stopPropagation();">
-                           <button class="qty-btn" onclick="updateCart(${item.id}, -1)">−</button>
-                           <span class="qty-val">${qty}</span>
-                           <button class="qty-btn" onclick="updateCart(${item.id}, 1)">＋</button>
-                       </div>`;
+        function quantityControls(item, qty) {
+            const change = delta => event => { event.stopPropagation(); updateCart(item.id, delta); };
+            if (qty === 0) return D.button('＋', 'add-btn', change(1));
+            const controls = D.el('div', 'qty-control');
+            controls.addEventListener('click', event => event.stopPropagation());
+            const plus = D.button('＋', 'qty-btn', change(1));
+            plus.disabled = qty >= 99;
+            controls.append(D.button('−', 'qty-btn', change(-1)), D.el('span', 'qty-val', qty), plus);
+            return controls;
+        }
 
-                const itemHtml = `
-                    <div class="menu-item">
-                        <img class="item-img" src="${escapeHtml(item.image_url)}" loading="lazy" onclick="openDetails(${item.id})">
-                        <div class="item-info">
-                            <div class="item-header">
-                                <h3 class="item-name" onclick="openDetails(${item.id})">${escapeHtml(item.name)}</h3>
-                                <span class="item-weight">${escapeHtml(item.weight)}</span>
-                            </div>
-                            <p class="item-desc" onclick="openDetails(${item.id})">${escapeHtml(item.description)}</p>
-                            <div class="price-row">
-                                <div class="item-price">${escapeHtml(item.price)} ₸</div>
-                                <div id="btn-container-${item.id}">${btnHtml}</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                const targetBlock = document.getElementById(`items-${item.category}`);
-                if (targetBlock) targetBlock.insertAdjacentHTML('beforeend', itemHtml);
+        function renderMenu() {
+            menuData = D.menu(menuData);
+            categories.forEach(cat => document.getElementById(`items-${cat}`).replaceChildren());
+            menuData.forEach(item => {
+                const card = D.el('div', 'menu-item');
+                const image = D.el('img', 'item-img');
+                image.loading = 'lazy'; image.alt = item.name; D.setImage(image, item.image_url);
+                image.addEventListener('click', () => openDetails(item.id));
+                const info = D.el('div', 'item-info');
+                const header = D.el('div', 'item-header');
+                const title = D.el('h3', 'item-name', item.name);
+                title.addEventListener('click', () => openDetails(item.id));
+                header.append(title, D.el('span', 'item-weight', item.weight));
+                const description = D.el('p', 'item-desc', item.description);
+                description.addEventListener('click', () => openDetails(item.id));
+                const prices = D.el('div', 'price-row');
+                const controls = D.el('div'); controls.id = `btn-container-${item.id}`;
+                controls.append(quantityControls(item, cart[item.id] || 0));
+                prices.append(D.el('div', 'item-price', `${item.price} ₸`), controls);
+                info.append(header, description, prices); card.append(image, info);
+                document.getElementById(`items-${item.category}`).append(card);
             });
         }
 
         function updateCart(id, delta) {
+            if (!D.validId(id) || ![-1, 1].includes(delta) || !menuData.some(item => item.id === id)) return;
+            if ((cart[id] || 0) >= 99 && delta > 0) return;
             if (!cart[id]) cart[id] = 0;
             cart[id] += delta;
             if (cart[id] <= 0) delete cart[id];
-            renderMenu(); updateCartUI(); updateDetailsControls(); 
+            renderMenu(); updateCartUI(); updateDetailsControls();
         }
 
         function updateCartUI() {
             let totalItems = 0; let subtotal = 0;
             const cartList = document.getElementById('cartItemsList');
-            cartList.innerHTML = "";
-
+            cartList.replaceChildren();
             Object.keys(cart).forEach(id => {
-                const item = menuData.find(m => m.id == id);
+                const item = menuData.find(m => m.id === Number(id));
                 const qty = cart[id];
+                if (!item || !Number.isSafeInteger(qty) || qty < 1 || qty > 99) { delete cart[id]; return; }
                 totalItems += qty; subtotal += item.price * qty;
-                cartList.innerHTML += `
-                    <div class="cart-item">
-                        <div>
-                            <div class="cart-item-name">${escapeHtml(item.name)}</div>
-                            <div class="cart-item-price">${escapeHtml(item.price)} ₸</div>
-                        </div>
-                        <div class="qty-control">
-                            <button class="qty-btn" onclick="updateCart(${item.id}, -1)">−</button>
-                            <span class="qty-val">${qty}</span>
-                            <button class="qty-btn" onclick="updateCart(${item.id}, 1)">＋</button>
-                        </div>
-                    </div>
-                `;
+                const row = D.el('div', 'cart-item');
+                const info = D.el('div');
+                info.append(D.el('div', 'cart-item-name', item.name), D.el('div', 'cart-item-price', `${item.price} ₸`));
+                row.append(info, quantityControls(item, qty)); cartList.append(row);
             });
 
             const service = Math.round(subtotal * 0.10);
@@ -270,7 +263,7 @@
             Object.keys(cart).forEach(id => {
                 const item = menuData.find(m => m.id == id);
                 const qty = cart[id];
-                orderItems.push({ id: item.id, name: item.name, price: item.price, qty: qty });
+                orderItems.push({ id: item.id, qty: qty });
                 subtotal += item.price * qty;
             });
 
@@ -292,7 +285,7 @@
 
                 if (res.ok) {
                     alert('Ваш заказ отправлен! Ожидайте подтверждения от официанта.');
-                    cart = {}; // Очищаем корзину
+                    cart = Object.create(null); // Очищаем корзину
                     tableSelect.value = ""; // Сбрасываем столик
                     updateCartUI();
                     renderMenu();
@@ -306,13 +299,14 @@
 
         function toggleCart() {
             const modal = document.getElementById('cartModal');
-            if (modal.style.display === 'flex') { closeModalWithAnim('cartModal', 'cartContent'); } 
+            if (modal.style.display === 'flex') { closeModalWithAnim('cartModal', 'cartContent'); }
             else { modal.style.display = 'flex'; document.getElementById('cartContent').style.transform = ''; lockScroll(); }
         }
 
         function openDetails(id) {
-            currentDetailsId = id; const item = menuData.find(m => m.id === id);
-            document.getElementById('detailsImg').src = item.image_url;
+            const item = menuData.find(m => m.id === id);
+            if (!D.validId(id) || !item) return;
+            currentDetailsId = id; D.setImage(document.getElementById('detailsImg'), item.image_url);
             document.getElementById('detailsTitle').innerText = item.name;
             document.getElementById('detailsWeight').innerText = item.weight;
             document.getElementById('detailsDesc').innerText = item.description;
@@ -331,9 +325,16 @@
 
         function updateDetailsControls() {
             if (currentDetailsId === null) return;
-            const id = currentDetailsId; const qty = cart[id] || 0; const container = document.getElementById('detailsControls');
-            if (qty === 0) { container.innerHTML = `<button class="order-btn" style="margin-top: 0; padding: 12px 24px; width: auto;" onclick="updateCart(${id}, 1)">＋ В корзину</button>`; } 
-            else { container.innerHTML = `<div class="qty-control" style="transform: scale(1.1); transform-origin: right center;"><button class="qty-btn" onclick="updateCart(${id}, -1)">−</button><span class="qty-val">${qty}</span><button class="qty-btn" onclick="updateCart(${id}, 1)">＋</button></div>`; }
+            const item = menuData.find(m => m.id === currentDetailsId);
+            const container = document.getElementById('detailsControls');
+            container.replaceChildren();
+            if (!item) return;
+            const qty = cart[item.id] || 0;
+            if (qty === 0) {
+                const add = D.button('＋ В корзину', 'order-btn', () => updateCart(item.id, 1));
+                add.style.marginTop = '0'; add.style.padding = '12px 24px'; add.style.width = 'auto';
+                container.append(add);
+            } else container.append(quantityControls(item, qty));
         }
 
         function scrollToSection(sectionId, btn) {

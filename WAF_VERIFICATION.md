@@ -1,5 +1,11 @@
 # Centralized WAF verification
 
+Current XSS/numeric/rendering results and deployment steps are in
+[XSS_FIX_VERIFICATION.md](XSS_FIX_VERIFICATION.md). The results below describe the
+earlier centralized-policy baseline; its statement that restaurant pages have no
+diff is historical. The current stage changes those pages and their shared helper
+without adding CSP or deploying production.
+
 Verified locally on 2026-11-03 on branch `dev`. No production request, production
 credential guessing, deployment, database migration, data import or live staff
 modification was performed.

@@ -181,10 +181,10 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
         }
         try:
             values = _collect_inspection_values(path, request, body)
+            detected, score = inspect_values(values, enabled)
         except (ValueError, UnicodeError, RecursionError):
             _write_log(settings, request, 'blocked', ['PARSE-001'], 0, 400, policy)
             return JSONResponse({'detail': 'Malformed request data.'}, status_code=400)
-        detected, score = inspect_values(values, enabled)
         matched_rules.extend(detected)
         risk_score += score
         if risk_score >= settings.block_threshold and policy.mode == "block":

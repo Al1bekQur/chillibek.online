@@ -4,6 +4,14 @@ Current architecture on `dev`. See [SETTINGS_DEPLOYMENT.md](SETTINGS_DEPLOYMENT.
 for configuration and manual deployment. Earlier phase reports are historical.
 No restaurant database migration is part of this change.
 
+Current XSS/input regression status: [XSS_FIX_VERIFICATION.md](XSS_FIX_VERIFICATION.md).
+Malformed HTML marked sections are handled by the existing optional XSS detector:
+Block denies, Monitor records/forwards, OFF does not call it. Invalid Unicode/JSON
+remains mandatory PARSE-001 validation. Payload integers and URL IDs are bounded
+before conversion. Restaurant output uses DOM text/nodes independently of policy;
+customer order item payloads contain IDs/quantities, not stored menu markup.
+No CSP policy was added by this stage.
+
 ## Request pipeline and audit
 
 ```text
@@ -98,7 +106,7 @@ ProtocolGuard precedes both dispatch paths. Framing, duplicate sensitive headers
 unsupported encoding, hard body/header bounds, read timeouts and hard capacity
 remain active with optional modules off. Flask retains its 1 MiB body-parsing
 ceiling, input validation, roles, token expiry, parameterized SQL and security
-headers. Existing browser escaping remains intact. Settings reports both WAF and
+headers. Safe restaurant DOM rendering remains mandatory. Settings reports both WAF and
 backend body ceilings.
 
 ## Traffic and audit decisions

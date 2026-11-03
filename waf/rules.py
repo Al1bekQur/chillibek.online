@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from urllib.parse import unquote_plus
 
+from .parsing import InvalidInspectionInput
+
 
 @dataclass(frozen=True)
 class DetectionRule:
@@ -24,6 +26,7 @@ RULES = [
 
 
 def normalize_for_detection(value: str) -> str:
+    _validate_text(value)
     normalized = unicodedata.normalize('NFKC', value)
     for _ in range(4):
         decoded = html.unescape(unquote_plus(normalized))
@@ -94,7 +97,14 @@ def _unsafe_scheme(value):
 
 def _xss(value):
     parser = _HTMLInspection()
-    parser.feed(value)
+    try:
+        parser.feed(value)
+        parser.close()
+    except AssertionError:
+        # HTMLParser's marked-section scanner asserts on input such as
+        # <![audit]>. Treat that malformed markup as an optional XSS match;
+        # Block/Monitor/OFF still belong to the central request policy.
+        return True
     return (parser.dangerous or _unsafe_scheme(value.strip()) or
             bool(re.search(r'<\s*(?:script|iframe|object|embed)\b|\bon[a-z]+\s*=\s*[\x22\x27]?(?:alert|confirm|prompt|fetch|eval)\s*\(', value)))
 
@@ -115,8 +125,13 @@ DETECTORS = {'sql_injection': _sql, 'xss': _xss, 'path_traversal': _traversal, '
 
 
 def inspect_values(values: list[str], enabled_categories: set[str] | None = None) -> tuple[list[str], int]:
+    if not isinstance(values, (list, tuple)):
+        raise InvalidInspectionInput('Inspection requires a sequence of text values.')
     matched = set()
     for value in values:
+        _validate_text(value)
+        if enabled_categories == set():
+            continue
         for offset in range(0, max(1, len(value)), 32512):
             normalized = normalize_for_detection(value[offset:offset + 32768])
             for rule in RULES:
@@ -125,6 +140,17 @@ def inspect_values(values: list[str], enabled_categories: set[str] | None = None
                         matched.add(rule.rule_id)
     rules = [rule for rule in RULES if rule.rule_id in matched]
     return [rule.rule_id for rule in rules], sum(rule.score for rule in rules)
+
+
+def _validate_text(value):
+    # Do not coerce arbitrary objects (or bytes) through attacker-controlled
+    # __str__. Lone JSON surrogates are invalid application text in every mode.
+    if not isinstance(value, str):
+        raise InvalidInspectionInput('Inspection values must be text.')
+    try:
+        value.encode('utf-8', 'strict')
+    except UnicodeError:
+        raise InvalidInspectionInput('Invalid Unicode text.') from None
 
 
 def inspect_headers(headers) -> bool:

@@ -125,6 +125,7 @@
         </div>
     </div>
 
+    <script src="./restaurant-dom.js"></script>
     <script>
         const API_URL = 'https://kali.pythonanywhere.com/api';
         function apiFetch(path, options = {}) {
@@ -139,18 +140,15 @@
                 return response;
             });
         }
-        function escapeHtml(value) {
-            return String(value ?? '').replace(/[&<>"']/g, char => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-            })[char]);
-        }
+        const D = window.RestaurantDOM;
         let fetchInterval;
         let timerInterval;
         let currentUserRole = ''; 
 
         function parseDate(dateStr) {
-            if (!dateStr) return null;
-            return new Date(dateStr.replace(' ', 'T') + 'Z');
+            if (typeof dateStr !== 'string' || !dateStr) return null;
+            const date = new Date(dateStr.replace(' ', 'T') + 'Z');
+            return Number.isFinite(date.getTime()) ? date : null;
         }
 
         function formatDateTime(dateStr) {
@@ -175,7 +173,7 @@
         function calcDuration(startStr, endStr) {
             const start = parseDate(startStr);
             const end = endStr ? parseDate(endStr) : new Date();
-            if (!start) return "00:00";
+            if (!start || !end) return "00:00";
             let diffSec = Math.floor((end - start) / 1000);
             if (diffSec < 0) diffSec = 0;
             const m = Math.floor(diffSec / 60).toString().padStart(2, '0');
@@ -233,77 +231,60 @@
             } catch (e) { console.error("Ошибка загрузки заказов:", e); }
         }
 
-        function renderOrders(orders) {
-            const listPending = document.getElementById('list-pending');
-            const listCooking = document.getElementById('list-cooking');
-            const listReady = document.getElementById('list-ready');
-            
-            listPending.innerHTML = ''; listCooking.innerHTML = ''; listReady.innerHTML = '';
-            let counts = { pending: 0, cooking: 0, ready: 0 };
+        function timerBadge(label, value, className, start = '') {
+            const badge = D.el('div', `timer-badge ${className}`, label);
+            badge.append(D.el('span', '', value));
+            if (start) badge.dataset.start = start;
+            return badge;
+        }
 
+        function renderOrders(records) {
+            const orders = D.orders(records);
+            const lists = Object.fromEntries(['pending', 'cooking', 'ready'].map(status =>
+                [status, document.getElementById(`list-${status}`)]));
+            Object.values(lists).forEach(list => list.replaceChildren());
             orders.forEach(order => {
-                let itemsHtml = '';
-                order.items.forEach(item => { itemsHtml += `<div class="item-row"><span><span class="item-qty">${escapeHtml(item.qty)}x</span> ${escapeHtml(item.name)}</span></div>`; });
-
-                const timeStr = formatTime(order.created_at); 
-                
-                let actionBtn = '';
-                let timersHtml = '<div class="timers-box">';
-
+                if (!lists[order.status]) return;
+                const card = D.el('div', 'order-card');
+                const header = D.el('div', 'order-header');
+                header.append(D.el('div', 'table-badge', `Стол ${order.table_number}`),
+                    D.el('div', 'order-time', `#${order.id} • ${formatTime(order.created_at)}`));
+                const timers = D.el('div', 'timers-box');
+                const items = D.el('div', 'order-items');
+                order.items.forEach(item => {
+                    const row = D.el('div', 'item-row');
+                    const content = D.el('span');
+                    content.append(D.el('span', 'item-qty', `${item.qty}x`), document.createTextNode(` ${item.name}`));
+                    row.append(content); items.append(row);
+                });
+                let actions;
+                const serving = ['admin', 'waiter'].includes(currentUserRole);
                 if (order.status === 'pending') {
-                    counts.pending++;
-                    timersHtml += `<div class="timer-badge timer-active" data-start="${escapeHtml(order.created_at)}">Ожидание: <span>00:00</span></div>`;
-                    
-                    if (currentUserRole === 'waiter' || currentUserRole === 'admin') {
-                        // ДВЕ КНОПКИ ДЛЯ ОФИЦИАНТА
-                        actionBtn = `
-                            <div class="btn-group">
-                                <button class="action-btn btn-confirm" onclick="updateOrderStatus(${order.id}, 'cooking')">👍 Одобрить</button>
-                                <button class="action-btn btn-reject" onclick="rejectOrder(${order.id})">❌ Отклонить</button>
-                            </div>
-                        `;
-                    } else { actionBtn = `<div class="empty-state" style="padding: 10px;">Ждем официанта</div>`; }
-                } 
-                else if (order.status === 'cooking') {
-                    counts.cooking++;
-                    timersHtml += `<div class="timer-badge timer-gray">Одобрен за: <span>${calcDuration(order.created_at, order.approved_at)}</span></div>`;
-                    timersHtml += `<div class="timer-badge timer-active" data-start="${escapeHtml(order.approved_at)}">Готовка: <span>00:00</span></div>`;
-
-                    if (currentUserRole === 'chef' || currentUserRole === 'admin') {
-                        actionBtn = `<button class="action-btn btn-cooking" onclick="updateOrderStatus(${order.id}, 'ready')">✅ Завершить (Готово)</button>`;
-                    } else { actionBtn = `<div class="empty-state" style="padding: 10px;">Готовится поваром...</div>`; }
-                } 
-                else if (order.status === 'ready') {
-                    counts.ready++;
-                    timersHtml += `<div class="timer-badge timer-gray">Одобрен за: <span>${calcDuration(order.created_at, order.approved_at)}</span></div>`;
-                    timersHtml += `<div class="timer-badge timer-gray">Приготовлен за: <span>${calcDuration(order.approved_at, order.ready_at)}</span></div>`;
-
-                    if (currentUserRole === 'waiter' || currentUserRole === 'admin') {
-                        actionBtn = `<button class="action-btn btn-ready" onclick="updateOrderStatus(${order.id}, 'completed')">🍽️ Отдано гостю</button>`;
-                    } else { actionBtn = `<div class="empty-state" style="padding: 10px;">Ждем забор официантом</div>`; }
+                    timers.append(timerBadge('Ожидание: ', '00:00', 'timer-active', order.created_at));
+                    actions = D.el('div', serving ? 'btn-group' : 'empty-state');
+                    if (serving) actions.append(
+                        D.button('👍 Одобрить', 'action-btn btn-confirm', () => updateOrderStatus(order.id, 'cooking')),
+                        D.button('❌ Отклонить', 'action-btn btn-reject', () => rejectOrder(order.id)));
+                    else actions.textContent = 'Ждем официанта';
+                } else {
+                    timers.append(timerBadge('Одобрен за: ', calcDuration(order.created_at, order.approved_at), 'timer-gray'));
+                    if (order.status === 'cooking') {
+                        timers.append(timerBadge('Готовка: ', '00:00', 'timer-active', order.approved_at));
+                        actions = ['admin', 'chef'].includes(currentUserRole)
+                            ? D.button('✅ Завершить (Готово)', 'action-btn btn-cooking', () => updateOrderStatus(order.id, 'ready'))
+                            : D.el('div', 'empty-state', 'Готовится поваром...');
+                    } else {
+                        timers.append(timerBadge('Приготовлен за: ', calcDuration(order.approved_at, order.ready_at), 'timer-gray'));
+                        actions = serving
+                            ? D.button('🍽️ Отдано гостю', 'action-btn btn-ready', () => updateOrderStatus(order.id, 'completed'))
+                            : D.el('div', 'empty-state', 'Ждем забор официантом');
+                    }
                 }
-                timersHtml += '</div>';
-
-                const cardHtml = `
-                    <div class="order-card">
-                        <div class="order-header">
-                            <div class="table-badge">Стол ${escapeHtml(order.table_number)}</div>
-                            <div class="order-time">#${escapeHtml(order.id)} • ${escapeHtml(timeStr)}</div>
-                        </div>
-                        ${timersHtml}
-                        <div class="order-items">${itemsHtml}</div>
-                        ${actionBtn}
-                    </div>
-                `;
-
-                if (order.status === 'pending') listPending.innerHTML += cardHtml;
-                else if (order.status === 'cooking') listCooking.innerHTML += cardHtml;
-                else if (order.status === 'ready') listReady.innerHTML += cardHtml;
+                card.append(header, timers, items, actions); lists[order.status].append(card);
             });
-
-            if (counts.pending === 0) listPending.innerHTML = '<div class="empty-state">Новых заказов нет</div>';
-            if (counts.cooking === 0) listCooking.innerHTML = '<div class="empty-state">На кухне пусто</div>';
-            if (counts.ready === 0) listReady.innerHTML = '<div class="empty-state">Все выдано</div>';
+            for (const [status, message] of Object.entries({pending: 'Новых заказов нет', cooking: 'На кухне пусто', ready: 'Все выдано'})) {
+                if (!lists[status].childElementCount) lists[status].append(D.el('div', 'empty-state', message));
+            }
         }
 
         function updateTickers() {
@@ -317,6 +298,7 @@
         }
 
         async function updateOrderStatus(orderId, newStatus) {
+            if (!D.validId(orderId) || !['cooking', 'ready', 'completed'].includes(newStatus)) return;
             try {
                 const res = await apiFetch(`/orders/${orderId}`, {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -328,6 +310,7 @@
 
         // НОВАЯ ФУНКЦИЯ: Удаление заказа официантом
         async function rejectOrder(orderId) {
+            if (!D.validId(orderId)) return;
             if (!confirm("Вы уверены, что хотите отклонить этот заказ? Он исчезнет навсегда.")) return;
             try {
                 const res = await apiFetch(`/orders/${orderId}`, {
@@ -342,38 +325,30 @@
             document.getElementById('archiveModal').style.display = 'flex';
             try {
                 const res = await apiFetch('/orders/archive');
-                const orders = await res.json();
-                
-                document.getElementById('archiveCount').innerText = orders.length;
-                const list = document.getElementById('archiveList');
-                list.innerHTML = '';
+                if (!res.ok) throw new Error('Archive unavailable.');
+                renderArchive(await res.json());
+            } catch (e) { alert('Ошибка загрузки архива'); }
+        }
 
-                if(orders.length === 0) {
-                    list.innerHTML = '<div class="empty-state">Архив пуст. Вы еще не завершили ни одного заказа.</div>';
-                    return;
-                }
-
-                orders.forEach(o => {
-                    const totalTime = calcDuration(o.created_at, o.ready_at);
-                    const formattedDate = formatDateTime(o.created_at);
-                    
-                    let itemsStr = o.items.map(i => `${escapeHtml(i.qty)}x ${escapeHtml(i.name)}`).join(', ');
-
-                    list.innerHTML += `
-                        <div class="archive-item">
-                            <div style="flex-grow: 1; margin-right: 15px;">
-                                <div class="table-badge" style="display:inline-block; margin-bottom: 8px;">Стол ${escapeHtml(o.table_number)}</div>
-                                <div class="archive-meta">${escapeHtml(formattedDate)}</div>
-                                <div>${itemsStr}</div>
-                            </div>
-                            <div style="text-align: right; min-width: 120px;">
-                                <div style="color: var(--primary); font-weight: bold; font-size: 1.1rem; margin-bottom: 5px;">${escapeHtml(o.total_price)} ₸</div>
-                                <div class="timer-badge timer-gray" style="display:inline-flex;">Итог: <span>${escapeHtml(totalTime)}</span></div>
-                            </div>
-                        </div>
-                    `;
-                });
-            } catch (e) { alert("Ошибка загрузки архива"); }
+        function renderArchive(records) {
+            const orders = D.orders(records);
+            document.getElementById('archiveCount').textContent = String(orders.length);
+            const list = document.getElementById('archiveList'); list.replaceChildren();
+            if (!orders.length) list.append(D.el('div', 'empty-state', 'Архив пуст. Вы еще не завершили ни одного заказа.'));
+            orders.forEach(order => {
+                const row = D.el('div', 'archive-item');
+                const details = D.el('div'); details.style.flexGrow = '1'; details.style.marginRight = '15px';
+                const table = D.el('div', 'table-badge', `Стол ${order.table_number}`);
+                table.style.display = 'inline-block'; table.style.marginBottom = '8px';
+                details.append(table, D.el('div', 'archive-meta', formatDateTime(order.created_at)),
+                    D.el('div', '', order.items.map(item => `${item.qty}x ${item.name}`).join(', ')));
+                const totals = D.el('div'); totals.style.textAlign = 'right'; totals.style.minWidth = '120px';
+                const price = D.el('div', '', `${order.total_price} ₸`);
+                price.style.color = 'var(--primary)'; price.style.fontWeight = 'bold'; price.style.fontSize = '1.1rem'; price.style.marginBottom = '5px';
+                const timer = timerBadge('Итог: ', calcDuration(order.created_at, order.ready_at), 'timer-gray');
+                timer.style.display = 'inline-flex'; totals.append(price, timer);
+                row.append(details, totals); list.append(row);
+            });
         }
 
         function closeArchive() {

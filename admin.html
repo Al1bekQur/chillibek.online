@@ -118,6 +118,7 @@
         </div>
     </div>
 
+    <script src="./restaurant-dom.js"></script>
     <script>
         const API_URL = 'https://kali.pythonanywhere.com/api';
         function apiFetch(path, options = {}) {
@@ -132,11 +133,7 @@
                 return response;
             });
         }
-        function escapeHtml(value) {
-            return String(value ?? '').replace(/[&<>"']/g, char => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-            })[char]);
-        }
+        const D = window.RestaurantDOM;
         let globalMenuData = [];
 
         const categoryNames = {
@@ -185,40 +182,30 @@
         async function loadAdminMenu() {
             try {
                 const res = await apiFetch('/menu');
-                globalMenuData = await res.json();
+                if (!res.ok) throw new Error('Menu unavailable.');
+                globalMenuData = D.menu(await res.json());
                 renderCategorizedMenu();
             } catch (e) { console.error("Ошибка загрузки:", e); }
         }
 
         function renderCategorizedMenu() {
+            globalMenuData = D.menu(globalMenuData);
             const container = document.getElementById('menuCategoriesContainer');
-            container.innerHTML = "";
-            const grouped = {};
-            globalMenuData.forEach(item => {
-                if (!grouped[item.category]) grouped[item.category] = [];
-                grouped[item.category].push(item);
-            });
-
-            for (const cat in categoryNames) {
-                if (grouped[cat] && grouped[cat].length > 0) {
-                    let catHtml = `<div class="category-header">${categoryNames[cat]}</div><div class="menu-list">`;
-                    grouped[cat].forEach(item => {
-                        catHtml += `
-                            <div class="menu-row">
-                                <div class="item-details">
-                                    <h4>${escapeHtml(item.name)}</h4>
-                                    <p>${escapeHtml(item.price)} ₸ • ${escapeHtml(item.weight)}</p>
-                                </div>
-                                <div class="row-controls">
-                                    <button class="edit-btn" onclick="openEditModal(${item.id})">Редактировать</button>
-                                    <button class="delete-btn" onclick="deleteItem(${item.id})">Удалить</button>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    catHtml += `</div>`;
-                    container.innerHTML += catHtml;
-                }
+            container.replaceChildren();
+            for (const cat of Object.keys(categoryNames)) {
+                const items = globalMenuData.filter(item => item.category === cat);
+                if (!items.length) continue;
+                const list = D.el('div', 'menu-list');
+                items.forEach(item => {
+                    const row = D.el('div', 'menu-row');
+                    const details = D.el('div', 'item-details');
+                    details.append(D.el('h4', '', item.name), D.el('p', '', `${item.price} ₸ • ${item.weight}`));
+                    const controls = D.el('div', 'row-controls');
+                    controls.append(D.button('Редактировать', 'edit-btn', () => openEditModal(item.id)),
+                        D.button('Удалить', 'delete-btn', () => deleteItem(item.id)));
+                    row.append(details, controls); list.append(row);
+                });
+                container.append(D.el('div', 'category-header', categoryNames[cat]), list);
             }
         }
 
@@ -253,7 +240,11 @@
                     document.getElementById('newWeight').value = '';
                     document.getElementById('newPrice').value = '';
                     document.getElementById('newImg').value = '';
-                    loadAdminMenu(); 
+                    loadAdminMenu();
+                } else {
+                    const failure = await res.json().catch(() => ({}));
+                    err.textContent = D.text(failure.message) || 'Не удалось сохранить блюдо.';
+                    err.style.display = 'block';
                 }
             } catch (e) { alert("Ошибка при добавлении."); }
         }
@@ -273,7 +264,8 @@
 
         // 3. СОХРАНЕНИЕ РЕДАКТИРОВАНИЯ
         async function saveEdit() {
-            const id = document.getElementById('editId').value;
+            const id = Number(document.getElementById('editId').value);
+            if (!D.validId(id)) return;
             const data = {
                 category: document.getElementById('editCat').value,
                 name: document.getElementById('editName').value.trim(),
@@ -298,20 +290,19 @@
         // ПОИСК
         function handleSearch(query) {
             const resultsBox = document.getElementById('searchResults');
-            if (query.length === 0) { resultsBox.style.display = 'none'; return; }
-            const lowerQuery = query.toLowerCase();
-            const matches = globalMenuData.filter(item => item.name.toLowerCase().includes(lowerQuery));
-
-            if (matches.length > 0) {
-                resultsBox.innerHTML = matches.map(item => `
-                    <div class="search-result-item" onclick="openEditFromSearch(${item.id})">
-                        <span><strong>${escapeHtml(item.name)}</strong></span>
-                        <span style="color: var(--text-muted); font-size: 0.85rem;">${item.price} ₸</span>
-                    </div>
-                `).join('');
-            } else {
-                resultsBox.innerHTML = `<div class="search-result-item" style="color: var(--text-muted); justify-content: center;">Ничего не найдено</div>`;
-            }
+            resultsBox.replaceChildren();
+            query = D.text(query);
+            if (!query.length) { resultsBox.style.display = 'none'; return; }
+            const matches = globalMenuData.filter(item => item.name.toLowerCase().includes(query.toLowerCase()));
+            matches.forEach(item => {
+                const row = D.el('div', 'search-result-item');
+                row.addEventListener('click', () => openEditFromSearch(item.id));
+                const name = D.el('span'); name.append(D.el('strong', '', item.name));
+                const price = D.el('span', '', `${item.price} ₸`);
+                price.style.color = 'var(--text-muted)'; price.style.fontSize = '0.85rem';
+                row.append(name, price); resultsBox.append(row);
+            });
+            if (!matches.length) resultsBox.append(D.el('div', 'search-result-item', 'Ничего не найдено'));
             resultsBox.style.display = 'block';
         }
 

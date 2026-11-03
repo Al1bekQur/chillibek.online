@@ -1,5 +1,10 @@
 # Chillibek WAF security and architecture audit
 
+Implementation update: A01/A02 input failures and A06 dynamic restaurant rendering
+are addressed in [XSS_FIX_VERIFICATION.md](XSS_FIX_VERIFICATION.md). This audit
+remains a historical account of its stated baseline, including its line references.
+CSP and the other deferred audit findings were not implemented in that stage.
+
 Audit date: **2026-11-03**. Source baseline: **`b27aa6a76a6163fe37d34128bcb7a80466039e54`**, branch `dev`.
 
 This is a source audit plus bounded, disposable local checks. The production URLs
