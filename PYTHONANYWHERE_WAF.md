@@ -1,3 +1,13 @@
+# Current centralized policy procedure
+
+Use [SETTINGS_DEPLOYMENT.md](SETTINGS_DEPLOYMENT.md) for this change's manual
+deployment procedure and [WAF_COVERAGE.md](WAF_COVERAGE.md) for current semantics.
+The earlier phase notes below are historical; their test counts/startup examples
+do not supersede the current guide. The separate Demo policy and pages are removed.
+Production staff login stays bounded in Monitor mode. No deployment was performed.
+
+---
+
 # PythonAnywhere Free: protect the actual restaurant API
 
 > **Current settings release, 2026-10-24:** the operator reports that the protected

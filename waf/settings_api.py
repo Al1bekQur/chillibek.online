@@ -3,13 +3,14 @@ import hmac
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from itsdangerous import BadSignature
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
 
 from .dashboard import SESSION_COOKIE, _is_authenticated, _serializer, require_dashboard_auth
 from .policy import Policy, PolicyStore, PolicyUpdate, ResetRequest, RevisionConflict
+from .enforcement import staff_policy
 
 
 ASSETS = Path(__file__).resolve().parents[1] / "settings"
@@ -31,23 +32,8 @@ class ManualBlockRequest(BaseModel):
         return value.strip()
 
 
-class DemoPolicyUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    revision: StrictInt = Field(ge=0)
-    enabled: StrictBool
-    threshold: StrictInt = Field(ge=1, le=20)
-    lockout_seconds: StrictInt = Field(ge=30, le=3600)
-
-
-class DemoLoginRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    username: StrictStr = Field(min_length=1, max_length=80)
-    password: StrictStr = Field(min_length=1, max_length=256)
-
-
-def settings_router(settings, store: PolicyStore, demo_store: PolicyStore):
+def settings_router(settings, store: PolicyStore):
     router = APIRouter()
-    demo_password = "synthetic-demo-valid-password"
 
     @router.get("/settings", include_in_schema=False)
     @router.get("/settings/", include_in_schema=False)
@@ -65,16 +51,6 @@ def settings_router(settings, store: PolicyStore, demo_store: PolicyStore):
     @router.get("/settings/settings.js", include_in_schema=False)
     async def javascript():
         return FileResponse(ASSETS / "settings.js", headers={"Cache-Control": "no-store"})
-
-    @router.get("/settings/demo", include_in_schema=False)
-    async def demo_page(request: Request):
-        if not _is_authenticated(request, settings):
-            return RedirectResponse("/dashboard/login?next=/settings", status_code=303)
-        return FileResponse(TEMPLATES / "demo.html", headers={"Cache-Control": "no-store"})
-
-    @router.get("/settings/demo.js", include_in_schema=False)
-    async def demo_javascript():
-        return FileResponse(ASSETS / "demo.js", headers={"Cache-Control": "no-store"})
 
     def csrf(request):
         return hashlib.sha256(request.cookies.get(SESSION_COOKIE, "").encode()).hexdigest()
@@ -100,11 +76,12 @@ def settings_router(settings, store: PolicyStore, demo_store: PolicyStore):
 
     def result(snapshot, request):
         policy = Policy.model_validate(snapshot["policy"])
+        login_policy = staff_policy(policy, settings.allow_disabled_mode)
         blocks = store.active_blocks()
         for block in blocks:
-            block["enforced"] = policy.mode == "block" and (
-                block["manual"] or policy.brute_force
-            )
+            all_routes = block['manual'] and block['kind'] == 'ip' and policy.mode == 'block'
+            block['enforced'] = all_routes or login_policy.mode == 'block' and (block['manual'] or login_policy.brute_force)
+            block['scope'] = 'all backend routes' if all_routes else 'staff login'
         return {
             **snapshot,
             "csrf_token": _serializer(settings).dumps({"purpose": "settings-csrf", "session": csrf(request)}),
@@ -116,7 +93,8 @@ def settings_router(settings, store: PolicyStore, demo_store: PolicyStore):
             "effective": {
                 "mode": policy.mode,
                 "login_abuse": (
-                    "disabled_test_only" if policy.mode == "disabled" or not policy.brute_force
+                    "enforced_production" if not settings.allow_disabled_mode
+                    else "disabled_test_only" if policy.mode == "disabled" or not policy.brute_force
                     else "enforced" if policy.mode == "block"
                     else "monitoring"
                 ),
@@ -126,85 +104,11 @@ def settings_router(settings, store: PolicyStore, demo_store: PolicyStore):
                 "route_limit_window_seconds": policy.route_limit_window_seconds,
                 "request_size_bytes": min(policy.request_size_bytes, settings.max_request_bytes),
                 "hard_request_size_bytes": settings.hard_max_request_bytes,
+                "backend_body_size_bytes": getattr(request.app.state, 'backend_body_size_bytes', None),
             },
             "blocks": blocks,
             "block_history": store.block_history(),
         }
-
-    def demo_result(snapshot, request):
-        policy = Policy.model_validate(snapshot["policy"])
-        enabled = policy.mode == "block" and policy.brute_force
-        blocks = demo_store.active_blocks()
-        for block in blocks:
-            block["enforced"] = enabled
-        return {
-            "revision": snapshot["revision"],
-            "enabled": enabled,
-            "threshold": policy.login_max_attempts,
-            "lockout_seconds": policy.login_initial_lockout_seconds,
-            "csrf_token": _serializer(settings).dumps({"purpose": "settings-csrf", "session": csrf(request)}),
-            "demo_account": {"username": "demo_waiter", "password": demo_password},
-            "blocks": blocks,
-            "block_history": demo_store.block_history(),
-        }
-
-    @router.get("/waf-api/demo")
-    async def read_demo(request: Request):
-        require_dashboard_auth(request, settings)
-        return demo_result(demo_store.read(), request)
-
-    @router.put("/waf-api/demo")
-    async def update_demo(request: Request, update: DemoPolicyUpdate):
-        actor = authorize_write(request)
-        before = demo_store.read()
-        current = Policy.model_validate(before["policy"])
-        try:
-            policy = current.model_copy(update={
-                "mode": "block" if update.enabled else "disabled",
-                "brute_force": update.enabled,
-                "login_max_attempts": update.threshold,
-                "login_ip_max_attempts": 1000,
-                "login_window_seconds": 3600,
-                "login_initial_lockout_seconds": update.lockout_seconds,
-                "login_lockout_multiplier": 1,
-                "login_max_lockout_seconds": update.lockout_seconds,
-            })
-            snapshot = demo_store.update(policy, update.revision, actor, "demo_policy_update")
-        except RevisionConflict:
-            raise HTTPException(409, "Demo settings changed in another session. Refresh and try again.") from None
-        return demo_result(snapshot, request)
-
-    @router.post("/waf-api/demo/login")
-    async def demo_login(request: Request, attempt: DemoLoginRequest):
-        actor = authorize_write(request)
-        if attempt.username != "demo_waiter":
-            return JSONResponse({"success": False, "message": "Invalid demo username or password."}, status_code=401)
-        policy = Policy.model_validate(demo_store.read()["policy"])
-        ip = request.client.host if request.client else "0.0.0.0"
-        retry = demo_store.login_admission(ip, attempt.username, policy)
-        if retry:
-            return JSONResponse(
-                {"success": False, "message": "Demo account temporarily locked.", "remaining_seconds": retry},
-                status_code=429, headers={"Retry-After": str(retry)},
-            )
-        if not hmac.compare_digest(attempt.password.encode("utf-8"), demo_password.encode("utf-8")):
-            detected = demo_store.record_login_failure(ip, attempt.username, policy)
-            if detected and policy.mode == "block" and policy.brute_force:
-                retry = demo_store.login_admission(ip, attempt.username, policy)
-                return JSONResponse(
-                    {"success": False, "message": "Demo account temporarily locked.", "remaining_seconds": retry},
-                    status_code=429, headers={"Retry-After": str(retry)},
-                )
-            return JSONResponse({"success": False, "message": "Invalid demo username or password."}, status_code=401)
-        demo_store.record_login_success(attempt.username)
-        return {"success": True, "role": "waiter", "demo": True}
-
-    @router.delete("/waf-api/demo/blocks/{block_id}")
-    async def unblock_demo(request: Request, block_id: str):
-        actor = authorize_write(request)
-        if not demo_store.unblock(block_id, actor):
-            raise HTTPException(404, "Demo block not found.")
-        return demo_result(demo_store.read(), request)
 
     @router.get("/waf-api/settings")
     async def read(request: Request):

@@ -100,7 +100,7 @@
       const row = document.createElement('div'); row.className = 'block-row';
       const info = document.createElement('div'); info.className = 'block-info';
       addText(info, 'strong', `${item.kind.toUpperCase()} · ${item.identifier}`);
-      addText(info, 'span', `${item.enforced ? 'Enforced' : 'Suspended by policy mode'} · ${item.reason} · ${item.rule_id} · ${item.attempts} attempts · ${item.manual ? 'Manual' : 'Automatic'}`);
+      addText(info, 'span', `${item.enforced ? 'Enforced' : 'Suspended by policy mode'} (${item.scope || 'staff login'}) · ${item.reason} · ${item.rule_id} · ${item.attempts} attempts · ${item.manual ? 'Manual' : 'Automatic'}`);
       addText(info, 'small', `Started ${new Date(item.started_at).toLocaleString()} · Expires ${item.expires_at ? new Date(item.expires_at).toLocaleString() : 'never'}`);
       const remaining = addText(info, 'small', item.remaining_seconds == null ? 'No expiry' : `${item.remaining_seconds}s remaining`);
       if (item.remaining_seconds != null) {
@@ -172,7 +172,8 @@
       ? 'Optional body-size protection is inactive'
       : data.policy.mode === 'monitor' ? 'Monitor only' : 'Enforced';
     $('request_sizeDetail').textContent =
-      `${bodyMode}: ${data.effective.request_size_bytes.toLocaleString()} bytes; hard resource ceiling: ${data.effective.hard_request_size_bytes.toLocaleString()} bytes.`;
+      `${bodyMode}: ${data.effective.request_size_bytes.toLocaleString()} bytes; hard resource ceiling: ${data.effective.hard_request_size_bytes.toLocaleString()} bytes.` +
+      (data.effective.backend_body_size_bytes ? ` Backend JSON parsing ceiling: ${data.effective.backend_body_size_bytes.toLocaleString()} bytes (always active).` : '');
     const rateMode = data.policy.mode === 'disabled' || !data.policy.rate_limiting
       ? 'Inactive'
       : data.policy.mode === 'monitor' ? 'Monitor only' : 'Enforced';
@@ -182,7 +183,7 @@
       ? 'Optional controls are inactive in this isolated test mode; password verification and operator security remain active.'
       : data.capabilities.allow_disabled_mode
       ? 'Isolated test mode only: disabling login abuse throttling never disables password verification.'
-      : `Required in production: ${data.policy.login_max_attempts} failures per account or ${data.policy.login_ip_max_attempts} per IP in ${data.policy.login_window_seconds}s.`;
+      : `Enforced in production, including Monitor mode: ${data.policy.login_max_attempts} failures per account or ${data.policy.login_ip_max_attempts} per IP in ${data.policy.login_window_seconds}s.`;
     renderBlocks(data);
   }
   function unknown() {

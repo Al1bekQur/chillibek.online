@@ -14,6 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY alembic.ini alembic.ini
 COPY backend backend
+COPY waf waf
+COPY settings settings
 
 EXPOSE 5000
-CMD ["python", "-m", "flask", "run"]
+CMD ["python", "-m", "backend.run"]

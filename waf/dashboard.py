@@ -28,7 +28,7 @@ EXTRA_RULES = [
      "description": "Ambiguous framing, method overrides and header control bytes."},
     {"rule_id": "SIZE-001", "category": "request_size", "score": 10,
      "description": "Streaming request body size limit."},
-    {'rule_id': 'BRUTE-001', 'category': 'brute_force', 'score': 5,
+    {'rule_id': 'AUTH-001', 'category': 'brute_force', 'score': 5,
      'description': 'Shared per-account and per-IP escalating login lockouts.'},
     {'rule_id': 'BOT-001', 'category': 'bot_detection', 'score': 5,
      'description': 'Repeated missing-endpoint probing, independent of User-Agent.'},
@@ -125,7 +125,7 @@ def dashboard_router(settings: WAFSettings) -> APIRouter:
     @router.get("/dashboard/api/summary")
     async def api_summary(
         request: Request,
-        decision: str | None = Query(default=None, pattern="^(allowed|blocked|upstream_error)$"),
+        decision: str | None = Query(default=None, pattern="^(allowed|detected|blocked|upstream_error)$"),
         path: str | None = Query(default=None, max_length=200),
         rule_id: str | None = Query(default=None, max_length=40),
         date_from: str | None = Query(default=None, max_length=40),
@@ -138,7 +138,7 @@ def dashboard_router(settings: WAFSettings) -> APIRouter:
     @router.get("/dashboard/api/events")
     async def api_events(
         request: Request,
-        decision: str | None = Query(default=None, pattern="^(allowed|blocked|upstream_error)$"),
+        decision: str | None = Query(default=None, pattern="^(allowed|detected|blocked|upstream_error)$"),
         path: str | None = Query(default=None, max_length=200),
         rule_id: str | None = Query(default=None, max_length=40),
         date_from: str | None = Query(default=None, max_length=40),
@@ -245,6 +245,9 @@ def _sanitize_event(event: dict[str, Any]) -> dict[str, Any]:
         "decision": str(event.get("decision", ""))[:40],
         "status_code": _safe_int(event.get("status_code")),
         "content_length": str(event.get("content_length", ""))[:40],
+        "policy_revision": _safe_int(event.get('policy_revision')),
+        "policy_mode": str(event.get('policy_mode', ''))[:12],
+        "enforcement": str(event.get('enforcement', ''))[:24],
     }
 
 
@@ -317,6 +320,7 @@ def _summary(events: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "total_requests": total,
         "allowed_requests": allowed,
+        "detected_requests": sum(1 for event in events if event.get('decision') == 'detected'),
         "blocked_requests": blocked,
         "block_rate": round((blocked / total) * 100, 2) if total else 0,
         "attacks_by_category": dict(attack_categories),
@@ -387,6 +391,7 @@ def _dashboard_html(csrf_token) -> str:
       <select id="decisionFilter">
         <option value="">All decisions</option>
         <option value="allowed">Allowed</option>
+        <option value="detected">Detected (forwarded)</option>
         <option value="blocked">Blocked</option>
         <option value="upstream_error">Upstream errors</option>
       </select>
@@ -399,6 +404,7 @@ def _dashboard_html(csrf_token) -> str:
     <section class="cards">
       <article><span>Total Requests</span><strong id="totalRequests">0</strong></article>
       <article><span>Allowed</span><strong id="allowedRequests">0</strong></article>
+      <article><span>Detected (forwarded)</span><strong id="detectedRequests">0</strong></article>
       <article><span>Blocked</span><strong id="blockedRequests">0</strong></article>
       <article><span>Block Rate</span><strong id="blockRate">0%</strong></article>
     </section>
@@ -476,6 +482,7 @@ async function loadDashboard() {
   const summary = await fetch('/dashboard/api/summary?' + p.toString()).then(r => r.json());
   document.getElementById('totalRequests').textContent = summary.total_requests;
   document.getElementById('allowedRequests').textContent = summary.allowed_requests;
+  document.getElementById('detectedRequests').textContent = summary.detected_requests;
   document.getElementById('blockedRequests').textContent = summary.blocked_requests;
   document.getElementById('blockRate').textContent = summary.block_rate + '%';
   renderCategories(summary.attacks_by_category || {});

@@ -16,29 +16,6 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    restart: unless-stopped
-    environment:
-      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?set FLASK_SECRET_KEY in an env file or shell}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-chillibek}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chillibek}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://chillibek.online,https://www.chillibek.online}
-      RATELIMIT_STORAGE_URI: ${RATELIMIT_STORAGE_URI:-memory://}
-    expose:
-      - "5000"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    networks:
-      - internal
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/menu', timeout=3)"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-
   migrate:
     build:
       context: .
@@ -56,31 +33,31 @@ services:
   waf:
     build:
       context: .
-      dockerfile: waf/Dockerfile
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     environment:
-      WAF_UPSTREAM_BASE_URL: http://backend:5000
-      WAF_LISTEN_HOST: 0.0.0.0
-      WAF_LISTEN_PORT: 8080
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?set FLASK_SECRET_KEY in an env file or shell}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-chillibek}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chillibek}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://chillibek.online,https://www.chillibek.online}
       WAF_DASHBOARD_USERNAME: ${WAF_DASHBOARD_USERNAME:?set WAF_DASHBOARD_USERNAME in an env file or shell}
       WAF_DASHBOARD_PASSWORD_HASH: ${WAF_DASHBOARD_PASSWORD_HASH:?set WAF_DASHBOARD_PASSWORD_HASH in an env file or shell}
       WAF_DASHBOARD_SESSION_SECRET: ${WAF_DASHBOARD_SESSION_SECRET:?set WAF_DASHBOARD_SESSION_SECRET in an env file or shell}
       WAF_POLICY_PATH: /app/waf/local/policy.sqlite3
       WAF_SECURE_COOKIES: "true"
-      FORWARDED_ALLOW_IPS: ${WAF_TRUSTED_PROXY_IPS:-127.0.0.1}
+      WAF_TRUSTED_PROXY_IPS: ${WAF_TRUSTED_PROXY_IPS:-}
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8080:5000"
     volumes:
       - waf-logs:/app/waf/logs
       - waf-policy:/app/waf/local
     depends_on:
-      backend:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     networks:
       - public
       - internal
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3)"]
       interval: 20s
       timeout: 5s
       retries: 5

@@ -52,6 +52,7 @@ class ProtocolGuard:
         except (sqlite3.Error, OSError):
             return await JSONResponse({'detail': 'Security storage unavailable.'}, status_code=503)(scope, receive, send)
         if not admitted:
+            self.record_block(scope, 'CAPACITY-001', 429)
             return await JSONResponse({'detail': 'Request capacity exceeded.'}, status_code=429)(scope, receive, send)
         try:
             async def secure_send(message):
@@ -95,13 +96,7 @@ class ProtocolGuard:
             if lengths and int(lengths[0]) != len(body):
                 error = 400
         if error:
-            # No request values or raw URI are returned or written on parser errors.
-            if self.store.read()['policy']['event_logging']:
-                self.settings.log_path.parent.mkdir(parents=True, exist_ok=True)
-                with self.settings.log_path.open('a', encoding='utf-8') as output:
-                    output.write(json.dumps({'timestamp':datetime.now(timezone.utc).isoformat(), 'method':scope.get('method','')[:12],
-                        'path':'/[protocol]', 'matched_rules':['HTTP-001'], 'decision':'blocked', 'status_code':error,
-                        'risk_score':0, 'query_present':bool(scope.get('query_string'))}) + '\n')
+            self.record_block(scope, 'HTTP-001', error)
             return await JSONResponse({'detail': 'Unsafe HTTP request.'}, status_code=error,
                 headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})(scope, receive, send)
         delivered = False
@@ -113,3 +108,19 @@ class ProtocolGuard:
                 return {'type': 'http.request', 'body': bytes(body), 'more_body': False}
             return await receive()
         await self.app(scope, replay, send)
+
+    def record_block(self, scope, rule, status):
+        # No request values or raw URI enter mandatory transport-denial records.
+        snapshot = self.store.read()
+        if snapshot['policy']['event_logging']:
+            self.settings.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.settings.log_path.open('a', encoding='utf-8') as output:
+                output.write(json.dumps({
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                    'client_ip': (scope.get('client') or ('unknown',))[0],
+                    'method': scope.get('method', '')[:12], 'path': '/[protocol]',
+                    'matched_rules': [rule], 'decision': 'blocked', 'status_code': status,
+                    'risk_score': 0, 'query_present': bool(scope.get('query_string')),
+                    'policy_revision': snapshot['revision'], 'policy_mode': snapshot['policy']['mode'],
+                    'enforcement': 'hosting',
+                }) + '\n')

@@ -20,6 +20,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
 
 from waf.policy import Policy, PolicyStore
+from waf.enforcement import CONTEXT_KEY, RequestPolicy, staff_policy
 
 try:
     from . import login_guard
@@ -197,7 +198,6 @@ def create_app(test_config=None):
         DATABASE_PATH=database_path,
         SECURITY_POLICY_PATH=os.getenv("WAF_POLICY_PATH"),
         SECURITY_POLICY_STORE=None,
-        SECURITY_POLICY_ENFORCED_BY_WAF=False,
         SECURITY_ALLOW_DISABLED_MODE=False,
         TOKEN_MAX_AGE=8 * 60 * 60,
         MAX_CONTENT_LENGTH=1 * 1024 * 1024,
@@ -249,31 +249,12 @@ def create_app(test_config=None):
 
     @app.before_request
     def enforce_shared_request_policy():
-        if not request.path.startswith("/api/") or app.config["SECURITY_POLICY_ENFORCED_BY_WAF"]:
+        if not request.path.startswith("/api/"):
             return None
-        store = app.config["SECURITY_POLICY_STORE"]
-        policy = Policy.model_validate(store.read()["policy"])
-        if not app.config["SECURITY_ALLOW_DISABLED_MODE"] and (
-            policy.mode == "disabled" or not policy.brute_force
-        ):
-            abort(503, description="Stored security policy violates mandatory production login protection.")
-        if policy.mode == "disabled" or not policy.rate_limiting:
-            return None
-        ip = request.remote_addr or "unknown"
-        global_exceeded = store.over_limit(
-            "backend-global", ip, policy.rate_limit_requests, policy.rate_limit_window_seconds,
-        )
-        route_exceeded = store.over_limit(
-            "backend-route:" + (request.endpoint or "unknown"), ip,
-            policy.route_limit_requests, policy.route_limit_window_seconds,
-        )
-        if global_exceeded or route_exceeded:
-            if policy.event_logging:
-                app.logger.warning("security_event=RATE_LIMIT rule_id=RATE-001")
-            if policy.mode == "block":
-                return jsonify({"success": False, "message": "Too many requests."}), 429, {
-                    "Retry-After": str(policy.rate_limit_window_seconds),
-                }
+        # No second optional firewall in Flask. A raw production Flask export
+        # fails closed; TESTING permits isolated application unit tests only.
+        if not isinstance(request.environ.get(CONTEXT_KEY), RequestPolicy) and not app.testing:
+            abort(503, description="Use the protected WSGI entry point.")
         return None
 
     @app.errorhandler(400)
@@ -285,6 +266,7 @@ def create_app(test_config=None):
     @app.errorhandler(413)
     @app.errorhandler(415)
     @app.errorhandler(429)
+    @app.errorhandler(503)
     def handle_client_error(error):
         return jsonify({"success": False, "message": error.description}), error.code
 
@@ -307,18 +289,24 @@ def create_app(test_config=None):
         password = data.get("password")
         if not isinstance(password, str) or not password or len(password) > 256:
             abort(400, description="A valid password is required.")
-        policy_store = app.config["SECURITY_POLICY_STORE"]
-        policy = Policy.model_validate(policy_store.read()["policy"])
-        if not app.config["SECURITY_ALLOW_DISABLED_MODE"] and (
+        context = request.environ.get(CONTEXT_KEY)
+        policy_store = context.store if context else app.config["SECURITY_POLICY_STORE"]
+        policy = context.policy if context else Policy.model_validate(policy_store.read()["policy"])
+        allow_disabled_mode = context.allow_disabled_mode if context else app.config['SECURITY_ALLOW_DISABLED_MODE']
+        if not allow_disabled_mode and (
             policy.mode == "disabled" or not policy.brute_force
         ):
             abort(503, description="Stored security policy violates mandatory production login protection.")
-        retry = login_guard.admit(policy_store, request.remote_addr or 'unknown', username, policy)
+        login_policy = context.login_policy if context else staff_policy(policy, app.config['SECURITY_ALLOW_DISABLED_MODE'])
+        retry = login_guard.admit(policy_store, request.remote_addr or 'unknown', username, login_policy)
         if retry:
+            if context:
+                context.rules.append('AUTH-001')
+                context.blocked = True
             if policy.event_logging:
                 app.logger.warning('security_event=LOGIN_LIMIT rule_id=AUTH-001')
             return jsonify({'success': False, 'message': 'Too many login attempts.'}), 429, {
-                'Retry-After': str(retry),
+                'Retry-After': str(max(1, retry)),
             }
 
         invalid_credentials = False
@@ -347,7 +335,11 @@ def create_app(test_config=None):
                         )
                 invalid_credentials = not password_valid
         if invalid_credentials:
-            detected = login_guard.failure(policy_store, request.remote_addr or 'unknown', username, policy)
+            detected = login_guard.failure(policy_store, request.remote_addr or 'unknown', username, login_policy)
+            if context and login_policy.brute_force and login_policy.mode != 'disabled':
+                context.rules.append('AUTH-FAIL-001')
+                if detected:
+                    context.rules.append('AUTH-001')
             if policy.event_logging:
                 app.logger.warning('security_event=LOGIN_FAILURE rule_id=AUTH-FAIL-001')
                 if detected:
@@ -620,8 +612,10 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(
-        host=os.getenv("FLASK_RUN_HOST", "127.0.0.1"),
-        port=int(os.getenv("FLASK_RUN_PORT", "5000")),
-        debug=os.getenv("FLASK_DEBUG", "false").lower() == "true",
+    from werkzeug.serving import run_simple
+    from waf.wsgi import protect_wsgi
+    run_simple(
+        os.getenv("FLASK_RUN_HOST", "127.0.0.1"),
+        int(os.getenv("FLASK_RUN_PORT", "5000")),
+        protect_wsgi(app),
     )

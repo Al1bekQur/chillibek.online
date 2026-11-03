@@ -1,3 +1,13 @@
+# Current centralized WAF verification
+
+This earlier phase report is historical. Current architecture and route coverage
+are in [WAF_COVERAGE.md](WAF_COVERAGE.md); current results are in
+[WAF_VERIFICATION.md](WAF_VERIFICATION.md). Use
+[SETTINGS_DEPLOYMENT.md](SETTINGS_DEPLOYMENT.md) for manual rollout. No production
+data or deployment was changed by this work.
+
+---
+
 # CHILLIBEK security engine review
 
 Scope: development source and isolated synthetic tests on Windows/Python 3.11.

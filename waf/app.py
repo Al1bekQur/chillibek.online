@@ -17,11 +17,12 @@ from fastapi.exceptions import RequestValidationError
 
 from .config import WAFSettings
 from .dashboard import dashboard_router, require_dashboard_auth, _css, _javascript
-from .policy import Policy, PolicyStore, RevisionConflict
+from .policy import Policy, PolicyStore
 from .rules import inspect_headers, inspect_values
 from .parsing import request_values
 from .protocol import ProtocolGuard
 from .settings_api import settings_router
+from .enforcement import RequestPolicy
 
 
 HOP_BY_HOP_HEADERS = {
@@ -44,19 +45,8 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
     app.state.settings = settings
     store = PolicyStore(settings.policy_path or settings.log_path.parent / "policy.sqlite3")
     app.state.policy_store = store
-    policy_path = settings.policy_path or settings.log_path.parent / "policy.sqlite3"
-    demo_store = PolicyStore(policy_path.with_name(f"{policy_path.stem}-demo{policy_path.suffix}"))
-    demo_snapshot = demo_store.read()
-    if demo_snapshot["revision"] == 0 and demo_snapshot["updated_at"] is None:
-        try:
-            demo_store.update(Policy(mode="disabled", brute_force=False), 0, "demo-system", "demo_initialize")
-        except RevisionConflict:
-            demo_snapshot = demo_store.read()
-            if demo_snapshot["updated_at"] is None:
-                raise
-    app.state.demo_policy_store = demo_store
     app.include_router(dashboard_router(settings))
-    app.include_router(settings_router(settings, store, demo_store))
+    app.include_router(settings_router(settings, store))
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, error):
@@ -116,14 +106,18 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
             "component": "chillibek-waf",
         }
 
-    @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+    @app.api_route("/{path:path}", methods=["GET", "HEAD", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
     async def proxy(path: str, request: Request) -> Response:
         # One immutable snapshot per request; a committed update is used by the next request,
         # including requests handled by another worker using the same durable volume.
-        policy = Policy.model_validate(store.read()["policy"])
+        snapshot = store.read()
+        policy = Policy.model_validate(snapshot["policy"])
+        context = RequestPolicy(policy, snapshot['revision'], store, settings.allow_disabled_mode)
+        request.state.policy_revision = context.revision
         if not settings.allow_disabled_mode and (
             policy.mode == "disabled" or not policy.brute_force
         ):
+            _write_log(settings, request, 'blocked', ['POLICY-001'], 0, 503, policy)
             return JSONResponse(
                 {"detail": "Stored security policy violates mandatory production login protection."},
                 status_code=503,
@@ -136,14 +130,15 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
         except ValueError:
             ip = "0.0.0.0"
         route = safe_path(request.url.path)
-        ip_block = store.blocked_ip(ip) if policy.mode == "block" else None
-        if ip_block and (ip_block["manual"] or policy.brute_force and ip_block["rule_id"] == "AUTH-001"):
-            status = 403 if ip_block["manual"] else 429
+        # Operator IP holds cover all backend traffic in Block mode. Automatic
+        # login locks are admitted once, at the authentication boundary below.
+        ip_block = store.blocked_ip(ip) if policy.mode == 'block' else None
+        if ip_block and ip_block['manual']:
+            status = 403
             _write_log(settings, request, "blocked", [ip_block["rule_id"]], settings.block_threshold, status, policy)
-            headers = {"Retry-After": str(ip_block["remaining_seconds"])} if status == 429 else None
             return JSONResponse(
                 {"success": False, "message": "Request blocked by WAF."},
-                status_code=status, headers=headers,
+                status_code=status,
             )
         if policy.mode != "disabled" and policy.rate_limiting:
             global_limited = store.over_limit(
@@ -217,6 +212,7 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
                                      settings.max_concurrent_per_ip, settings.request_timeout_seconds + 30)
             if not acquired:
                 matched_rules.append('CONCURRENT-001')
+                risk_score += settings.block_threshold
                 if policy.mode == 'block':
                     _write_log(settings, request, 'blocked', matched_rules, settings.block_threshold, 429, policy)
                     return JSONResponse({'detail': 'Too many concurrent requests.'}, status_code=429)
@@ -230,6 +226,7 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
                     upstream_url,
                     content=body,
                     headers=headers,
+                    extensions={'waf_context': context},
                 ), timeout=settings.request_timeout_seconds)
         except asyncio.TimeoutError:
             _write_log(settings, request, 'upstream_error', ['TIMEOUT-001'], 0, 504, policy)
@@ -241,17 +238,16 @@ def create_app(settings: WAFSettings | None = None) -> FastAPI:
             if acquired:
                 store.release(lease)
 
-        if path == 'api/staff/login' and request.method == 'POST' and policy.brute_force and policy.mode != 'disabled':
-            if upstream_response.status_code == 401:
-                matched_rules.append('BRUTE-FAIL-001')
-            elif upstream_response.status_code == 429:
-                matched_rules.append('BRUTE-001')
+        matched_rules.extend(context.rules)
+        if 'AUTH-001' in context.rules:
+            risk_score += settings.block_threshold
         if policy.mode != "disabled" and policy.bot_detection and upstream_response.status_code == 404:
             store.over_limit('probes', ip, policy.bot_detection_limit, policy.bot_detection_window_seconds)
             matched_rules.append('BOT-PROBE-001')
 
         response_headers = _response_headers(upstream_response.headers)
-        _write_log(settings, request, "allowed", matched_rules, risk_score, upstream_response.status_code, policy)
+        decision = 'blocked' if context.blocked else 'detected' if matched_rules else 'allowed'
+        _write_log(settings, request, decision, matched_rules, risk_score, upstream_response.status_code, policy)
         response = Response(
             content=upstream_response.content,
             status_code=upstream_response.status_code,
@@ -351,9 +347,9 @@ def _write_log(
         "risk_score": risk_score,
         "decision": decision,
         "status_code": status_code,
+        "policy_revision": getattr(request.state, 'policy_revision', None),
+        "policy_mode": policy.mode,
+        "enforcement": "waf" if decision == 'blocked' else "upstream",
     }
     with log_path.open("a", encoding="utf-8") as log_file:
         log_file.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
-app = create_app()

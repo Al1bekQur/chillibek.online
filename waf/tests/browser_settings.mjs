@@ -49,7 +49,10 @@ async function waitFor(expression) {
   }
   throw new Error(`Timed out: ${expression}`);
 }
-const switchFor = label => `document.querySelector('button[aria-label="${label}"]')`;
+// The mode button's accessible label includes its current server mode.
+const switchFor = label => label === 'Master WAF Block mode'
+  ? `document.getElementById('mode')`
+  : `document.querySelector('button[aria-label="${label}"]')`;
 const checked = label => `${switchFor(label)}?.getAttribute('aria-checked')`;
 const enabled = label => `${switchFor(label)} && !${switchFor(label)}.disabled`;
 const snapshot = `fetch('/waf-api/settings',{cache:'no-store'}).then(r=>r.json())`;
@@ -111,7 +114,7 @@ try {
   for (const [key, label] of [
     ['mode', 'Master WAF Block mode'], ['sql_injection', 'SQL Injection Protection'],
     ['xss', 'XSS Protection'], ['path_traversal', 'Path Traversal Protection'],
-    ['rate_limiting', 'Rate Limiting'], ['suspicious_headers', 'Suspicious Header Detection'],
+    ['rate_limiting', 'Global and Route Rate Limiting'], ['suspicious_headers', 'Suspicious Header Detection'],
     ['request_size', 'Request Size Protection'], ['event_logging', 'Security Event Logging'],
     ['command_injection', 'Command Injection Protection'], ['brute_force', 'Login Abuse Protection'],
     ['bot_detection', 'Scanner Behavior Protection']
@@ -130,6 +133,11 @@ try {
     await waitFor(`window.__wafReloadMarker !== true && ${enabled(label)} && ${checked(label)} === 'false'`);
     assert.equal((await evaluate(snapshot)).policy[key], changed);
     await click(switchFor(label));
+    if (key === 'mode') {
+      // Isolated mode cycles Block -> Monitor -> Disabled -> Block.
+      await waitFor(`${enabled(label)} && document.getElementById('modeState').textContent === 'DISABLED'`);
+      await click(switchFor(label));
+    }
     await waitFor(`${enabled(label)} && ${checked(label)} === 'true'`);
     assert.deepEqual((await evaluate(snapshot)).policy, before.policy);
   }

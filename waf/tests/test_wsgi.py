@@ -313,7 +313,8 @@ def test_ip_threshold_monitor_and_disabled_login_modes(staging):
     ip_block = next(block for block in read(client)['blocks'] if block['kind'] == 'ip')
     assert ip_block['attempts'] == 2 and ip_block['rule_id'] == 'AUTH-001'
     throttled = client.get('/api/menu', environ_overrides={'REMOTE_ADDR': '198.51.100.20'})
-    assert throttled.status_code == 429 and int(throttled.headers['Retry-After']) > 0
+    assert throttled.status_code == 200  # Login lockouts do not deny menu or order traffic.
+    assert client.post('/api/staff/login', json=bad, **same_ip).status_code == 429
 
     assert update(client, mode='monitor').status_code == 200
     assert client.get('/api/menu', environ_overrides={'REMOTE_ADDR': '198.51.100.20'}).status_code == 200
@@ -324,7 +325,7 @@ def test_ip_threshold_monitor_and_disabled_login_modes(staging):
     assert not [block for block in read(client)['blocks'] if block['kind'] == 'account']
     assert any(block['kind'] == 'ip' for block in read(client)['blocks'])
     events = [json.loads(line) for line in settings.log_path.read_text().splitlines()]
-    assert any('BRUTE-FAIL-001' in event['matched_rules'] for event in events)
+    assert any('AUTH-FAIL-001' in event['matched_rules'] for event in events)
 
     assert update(client, mode='disabled').status_code == 200
     assert not any(block['enforced'] for block in read(client)['blocks'])
@@ -340,45 +341,12 @@ def test_ip_threshold_monitor_and_disabled_login_modes(staging):
     assert anonymous.put('/waf-api/settings', json={}).status_code == 401
 
 
-def test_wsgi_operator_demo_isolated_from_restaurant_identity_and_orders(staging):
-    client, wrapper, settings, restaurant = staging
+def test_wsgi_has_one_policy_and_no_demo_navigation(staging):
+    client, wrapper, _, _ = staging
     admin_login(client)
-    state = client.get('/waf-api/demo', base_url='https://staging.test').json
-    assert wrapper.waf.state.demo_policy_store.path != settings.policy_path
-    headers = {'X-CSRF-Token': state['csrf_token']}
-    enabled = client.put('/waf-api/demo', base_url='https://staging.test', headers=headers, json={
-        'revision': state['revision'], 'enabled': True, 'threshold': 2, 'lockout_seconds': 30,
-    })
-    assert enabled.status_code == 200
-    bad = {'username': 'demo_waiter', 'password': 'synthetic-wrong-password'}
-    assert client.post('/waf-api/demo/login', base_url='https://staging.test',
-                       headers={'X-CSRF-Token': enabled.json['csrf_token']}, json=bad).status_code == 401
-    blocked = client.post('/waf-api/demo/login', base_url='https://staging.test',
-                          headers={'X-CSRF-Token': enabled.json['csrf_token']}, json=bad)
-    assert blocked.status_code == 429
-    block_state = client.get('/waf-api/demo', base_url='https://staging.test').json
-    assert block_state['blocks'][0]['enforced'] is True
-    released = client.delete(
-        f"/waf-api/demo/blocks/{block_state['blocks'][0]['id']}",
-        base_url='https://staging.test', headers={'X-CSRF-Token': block_state['csrf_token']},
-    )
-    assert released.status_code == 200
-
-    off = client.put('/waf-api/demo', base_url='https://staging.test',
-                     headers={'X-CSRF-Token': released.json['csrf_token']}, json={
-        'revision': released.json['revision'], 'enabled': False, 'threshold': 2, 'lockout_seconds': 30,
-    })
-    assert off.status_code == 200
-    responses = [client.post('/waf-api/demo/login', base_url='https://staging.test',
-                             headers={'X-CSRF-Token': off.json['csrf_token']}, json=bad).status_code
-                 for _ in range(20)]
-    assert responses == [401] * 20
-    assert wrapper.waf.state.policy_store.read()['policy'] == Policy().model_dump()
-    from sqlalchemy import text
-    with restaurant.app_context():
-        with restaurant.config['DB_ENGINE'].connect() as connection:
-            assert connection.execute(text("SELECT COUNT(*) FROM staff WHERE username='demo_waiter'")).scalar_one() == 0
-            assert connection.execute(text('SELECT COUNT(*) FROM orders')).scalar_one() == 0
+    assert '/settings/demo' not in client.get('/settings/', base_url='https://staging.test').text
+    assert client.get('/waf-api/demo', base_url='https://staging.test').status_code == 404
+    assert not hasattr(wrapper.waf.state, 'demo_policy_store')
 
 
 def test_production_keeps_login_guard_mandatory_but_accepts_safe_thresholds(staging):

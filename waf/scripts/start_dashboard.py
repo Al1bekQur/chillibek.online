@@ -2,7 +2,6 @@ import getpass
 import os
 import secrets
 
-import uvicorn
 from werkzeug.security import generate_password_hash
 
 
@@ -22,7 +21,11 @@ def main():
     password = ""
     confirmation = ""
 
-    uvicorn.run("waf.app:app", host="127.0.0.1", port=8080, reload=False)
+    # Import after configuring operator credentials; run the same WSGI pipeline.
+    os.environ['WAF_LISTEN_HOST'] = '127.0.0.1'
+    os.environ['WAF_LISTEN_PORT'] = '8080'
+    from waf.run import main as run_protected
+    run_protected()
 
 
 if __name__ == "__main__":

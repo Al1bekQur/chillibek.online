@@ -1,147 +1,35 @@
-# Chillibek WAF Phase 1
+# Chillibek centralized WAF
 
-Current security-engine findings, eleven controls, reproducible verification and
-measured limitations: [`SECURITY_REPORT.md`](../SECURITY_REPORT.md).
+The existing FastAPI WAF and restaurant Flask application run inside one protected
+WSGI pipeline. Export `backend.wsgi:application`, or use `protect_wsgi(restaurant,
+settings, ...)` in the managed host's WSGI file. Local development uses
+`python -m backend.run` (port 5000) or `python -m waf.run` (port 8080); both run the
+same protected application. Raw production Flask API access fails closed.
 
-For the no-new-provider PythonAnywhere Free option, see
-[`PYTHONANYWHERE_WAF.md`](../PYTHONANYWHERE_WAF.md). `waf.wsgi.protect_wsgi` adapts
-this same WAF around an existing Flask callable inside one managed WSGI app.
-It is prepared and tested locally; production installation requires separate approval.
+- [Route matrix, pipeline audit and logging](../WAF_COVERAGE.md)
+- [Configuration and manual deployment](../SETTINGS_DEPLOYMENT.md)
+- [Actual verification results](../WAF_VERIFICATION.md)
+- [PythonAnywhere WSGI template](../deploy/pythonanywhere_wsgi.py.example)
 
-The live Security Settings panel extends this original proxy. See
-[`SETTINGS_DEPLOYMENT.md`](../SETTINGS_DEPLOYMENT.md) for current controls, API,
-persistence, local startup, tests and public routing requirements. On local HTTP,
-set `WAF_SECURE_COOKIES=false` before starting the Dashboard; public HTTPS defaults
-to Secure cookies. This does not deploy `/settings` to the public domain.
+One durable `WAF_POLICY_PATH` store holds policy, revision history, account/IP
+login counters and audited blocks. Each restaurant request uses one snapshot
+through inspection and authentication. The authenticated `/settings/` panel
+controls the real routes used by index, admin and kitchen. There is no Demo policy
+or alternate firewall.
 
-This directory contains the first working Web Application Firewall prototype for the Chillibek diploma project. It is an independent Python reverse proxy built with FastAPI, httpx, and Uvicorn.
+Content rules, rate limiting and bot detection obey their individual switches on
+all backend routes. Production staff login protection remains required, including
+Monitor mode. OFF/Disabled login experiments use temporary staging data and
+explicit `allow_disabled_mode=True`; password verification always stays active.
 
-## Architecture
-
-Browser or API client traffic is sent to the WAF at `http://127.0.0.1:8080`. The WAF inspects the request and forwards allowed traffic to the fixed local Flask backend at `http://127.0.0.1:5000`.
-
-The upstream address is configured in code through `WAFSettings` and is not taken from user input. This prevents clients from choosing arbitrary proxy targets and reduces SSRF risk.
-
-## Detection
-
-The WAF inspects:
-
-- HTTP method and path metadata
-- Query string
-- Selected textual headers: `User-Agent`, `Content-Type`, `Accept`, `Referer`
-- Textual request bodies, including JSON and form data
-
-Phase 1 includes configurable Python rules for:
-
-- `SQLI-001`: common SQL injection markers
-- `XSS-001`: common script tags, event handlers, and JavaScript URLs
-- `TRAV-001`: path traversal and sensitive local file markers
-
-Each rule contributes a risk score. Requests at or above the block threshold receive HTTP 403.
-
-## Safe Logging
-
-Logs are written as JSON lines to `waf/logs/waf.log`. Records include timestamp, client IP, method, path, whether a query exists, content length, matched rule IDs, risk score, decision, and status code.
-
-The WAF does not log raw request bodies, passwords, cookies, authorization headers, access tokens, or full query values.
-
-## Local Setup
-
-From the project root:
+Run from the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest backend/tests waf/tests -q
+node --test waf/tests/test_management_routes.mjs
+node --check settings/settings.js
 ```
 
-Start the Flask backend:
-
-```powershell
-$env:FLASK_APP = "backend/server.py"
-.\.venv\Scripts\flask.exe run --host 127.0.0.1 --port 5000
-```
-
-Start the WAF in a second terminal:
-
-```powershell
-.\.venv\Scripts\python.exe -m waf.run
-```
-
-Check availability:
-
-```powershell
-Invoke-WebRequest http://127.0.0.1:8080/health
-Invoke-WebRequest http://127.0.0.1:8080/api/menu
-```
-
-## Security Dashboard
-
-The WAF includes a separate read-only dashboard at:
-
-```text
-http://127.0.0.1:8080/dashboard
-```
-
-Dashboard authentication is independent from restaurant staff authentication. Configure it with environment variables before starting the WAF:
-
-```powershell
-$env:WAF_DASHBOARD_USERNAME = "analyst"
-$env:WAF_DASHBOARD_SESSION_SECRET = "<random 32+ character secret>"
-$env:WAF_DASHBOARD_PASSWORD_HASH = "<Werkzeug password hash>"
-```
-
-Generate a password hash locally without printing the password in source code:
-
-```powershell
-.\.venv\Scripts\python.exe -c "from getpass import getpass; from werkzeug.security import generate_password_hash; print(generate_password_hash(getpass('Dashboard password: ')))"
-```
-
-For local manual startup, you can also use the helper script. It prompts for a dashboard username and password, hashes the password in memory, creates a random session secret, and starts the WAF:
-
-```powershell
-.\.venv\Scripts\python.exe waf\scripts\start_dashboard.py
-```
-
-The dashboard reads real structured WAF events from `waf/logs/waf.log`. It shows totals, allowed and blocked requests, block rate, attack categories, risk scores, matched rule IDs, recent events, filters, pagination, an activity chart, and a read-only rule overview.
-
-Dashboard endpoints are reserved by the WAF and are not proxied to Flask:
-
-- `GET /dashboard`
-- `GET|POST /dashboard/login`
-- `POST /dashboard/logout`
-- `GET /dashboard/api/summary`
-- `GET /dashboard/api/events`
-- `GET /dashboard/api/rules`
-
-The dashboard APIs require the WAF dashboard session cookie. They do not expose raw request bodies, authorization headers, cookies, tokens, passwords, or full query values.
-
-## Tests
-
-Run all tests:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest backend\tests waf\tests
-```
-
-The WAF tests use synthetic local ASGI requests and do not contact production services.
-
-## Configuration
-
-Default settings are in `waf/config.py`:
-
-- Upstream: `http://127.0.0.1:5000`
-- WAF listen address: `127.0.0.1:8080`
-- Maximum request size: 1 MiB
-- Upstream timeout: 5 seconds
-- Block threshold: 5
-- Log path: `waf/logs/waf.log`
-
-## Known Limitations
-
-This is a Phase 1 prototype, not a production WAF.
-
-- Regex rules can produce false positives and false negatives.
-- It does not parse SQL, JavaScript, HTML, multipart uploads, or nested encodings deeply.
-- It does not perform behavioral anomaly detection.
-- Dashboard authentication is suitable for local prototype use; production deployment should use HTTPS, stronger account management, and secret rotation.
-- It should be placed in front of a backend that is not directly reachable by users.
-- It currently uses local file logging, which should be replaced or centralized for cloud deployment.
+The tests include the real WSGI -> WAF -> Flask stack and disposable staff.
+Browser verification instructions are in the deployment guide. Nothing in these
+commands deploys the site or probes the live staff login.

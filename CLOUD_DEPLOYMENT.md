@@ -1,9 +1,13 @@
 # Chillibek Cloud Deployment Preparation
 
-This document describes the prepared target architecture:
+Current policy, route coverage and rollout instructions are in
+[SETTINGS_DEPLOYMENT.md](SETTINGS_DEPLOYMENT.md) and
+[WAF_COVERAGE.md](WAF_COVERAGE.md). No deployment was performed.
+
+This document describes the prepared staging architecture:
 
 ```text
-Internet -> HTTPS reverse proxy -> Chillibek FastAPI WAF -> Flask backend -> PostgreSQL
+Internet -> verified HTTPS proxy -> protected WSGI (WAF -> Flask in-process) -> PostgreSQL
 ```
 
 Production PythonAnywhere remains untouched. Perform migration only from an authorized database export.
@@ -11,10 +15,13 @@ Production PythonAnywhere remains untouched. Perform migration only from an auth
 ## Services
 
 - `postgres`: private PostgreSQL database with persistent Docker volume.
-- `backend`: Flask API. It is exposed only inside the private Docker network.
-- `waf`: public entry point on port `8080` for local/VPS testing. Put HTTPS in front of this service before production traffic.
+- `migrate`: existing schema-migration job; use fresh isolated staging volumes.
+- `waf`: one WSGI application containing WAF and Flask, bound to loopback port `8080` for local/VPS staging. There is no separate raw backend service.
 
-Only the WAF should be reachable from the internet. PostgreSQL and Flask must stay private.
+Only the protected WSGI entry point may be reachable through a verified proxy.
+Configure exact `WAF_TRUSTED_PROXY_IPS` and header overwrites as documented in
+the current deployment guide. Never run this Compose example against live volumes
+as an automatic deployment; startup can run schema migrations and seed an empty menu.
 
 ## Required Secrets
 
@@ -95,7 +102,9 @@ Then recreate staff accounts through the backend CLI with new passwords.
 - Keep WAF dashboard credentials separate from restaurant staff credentials.
 - Rotate all staff passwords if there is any evidence legacy plaintext credentials were exposed.
 - Use centralized logging for WAF events before production deployment.
-- Replace in-memory rate limit storage with Redis or another shared backend for multi-worker deployments.
+- Policy, counters, admission and audits share the persistent `WAF_POLICY_PATH`
+  SQLite store across same-host workers. Independent multi-host replication is
+  outside this topology; do not put policy files on an unverified network filesystem.
 
 ## Remaining Production Work
 

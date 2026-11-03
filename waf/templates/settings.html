@@ -15,7 +15,6 @@
     <nav aria-label="Security navigation">
       <a href="/dashboard"><span aria-hidden="true">▦</span> Overview <span class="arrow">↗</span></a>
       <a href="./" aria-current="page"><span aria-hidden="true">⚙</span> Security Settings</a>
-      <a href="/settings/demo"><span aria-hidden="true">▶</span> Login Abuse Demo</a>
       <a href="https://chillibek.online/"><span aria-hidden="true">⌂</span> Restaurant <span class="arrow">↗</span></a>
     </nav>
     <div class="sidebar-note"><span class="tiny-dot"></span> ALWAYS ENFORCED<p>Authentication, authorization, CSRF, protocol safety and configuration auditing remain active in every mode.</p></div>
@@ -33,7 +32,7 @@
       <div class="notice" id="notice" role="status" aria-live="polite">Reading the current server policy…</div>
       <div id="auth" class="auth" hidden><p>Sign in with your WAF operator account to manage protection.</p><a class="button primary" href="/dashboard/login?next=/settings">Sign in to WAF ↗</a></div>
       <section class="panel master-panel" aria-labelledby="master-title">
-        <div class="section-icon" aria-hidden="true">◈</div><div class="master-copy"><div class="eyebrow">FIREWALL MODE</div><h2 id="master-title">Master WAF</h2><p>Block enforces enabled rules. Monitor records detections without optional blocks. Disabled is available only in an isolated test deployment; authentication and authorization remain mandatory.</p></div>
+        <div class="section-icon" aria-hidden="true">◈</div><div class="master-copy"><div class="eyebrow">FIREWALL MODE</div><h2 id="master-title">Master WAF</h2><p>Block enforces enabled rules. Monitor records detections without optional blocks. Production staff login lockouts remain enforced. Disabled is available only in an isolated test deployment; authentication and authorization remain mandatory.</p></div>
         <div class="control"><span id="modeState" class="state unknown">Unknown</span><button id="mode" type="button" class="switch" role="switch" aria-label="Master WAF Block mode" aria-checked="false" disabled><span></span></button><small>Monitor / Block</small></div>
       </section>
       <section class="panel modules" aria-labelledby="modules-title">
@@ -41,7 +40,7 @@
         <div id="rules"></div>
       </section>
       <section class="panel" aria-labelledby="thresholds-title">
-        <div class="panel-heading"><div><h2 id="thresholds-title">Shared rate and login policy</h2><p>These validated values are read by both the WAF and Flask application.</p></div><span class="tag">PERSISTENT POLICY</span></div>
+        <div class="panel-heading"><div><h2 id="thresholds-title">Shared rate and login policy</h2><p>One validated policy snapshot governs inspection and staff login admission for each request.</p></div><span class="tag">PERSISTENT POLICY</span></div>
         <div id="policyFields" class="policy-fields"></div>
       </section>
       <section class="panel logging" aria-labelledby="logging-title"><div><div class="eyebrow">OBSERVABILITY</div><h2 id="logging-title">Security Event Logging</h2><p>Record request decisions, matched rules, and risk scores in the Dashboard. Configuration audit logging always stays enabled.</p></div><div id="loggingControl"></div></section>

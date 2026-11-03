@@ -16,6 +16,7 @@ from werkzeug.wrappers import Response
 
 from .app import create_app
 from .config import WAFSettings
+from .enforcement import CONTEXT_KEY
 
 
 class InProcessTransport(httpx.AsyncBaseTransport):
@@ -39,7 +40,11 @@ class InProcessTransport(httpx.AsyncBaseTransport):
                 raise httpx.RequestError("Invalid internal scheme.", request=request)
             forwarded = httpx.Request(request.method, request.url.copy_with(scheme=scheme),
                                       headers=headers, content=body)
-            with httpx.WSGITransport(app=self.application, remote_addr=headers["x-forwarded-for"]) as transport:
+            def trusted_application(environ, start_response):
+                environ[CONTEXT_KEY] = request.extensions['waf_context']
+                return self.application(environ, start_response)
+
+            with httpx.WSGITransport(app=trusted_application, remote_addr=headers["x-forwarded-for"]) as transport:
                 response = transport.handle_request(forwarded)
                 try:
                     return httpx.Response(response.status_code, headers=response.headers,
@@ -79,13 +84,13 @@ class ProtectedWSGI:
         self.waf = create_app(settings)
         if hasattr(application, "config"):
             application.config["SECURITY_POLICY_STORE"] = self.waf.state.policy_store
-            application.config["SECURITY_POLICY_ENFORCED_BY_WAF"] = True
-            application.config["SECURITY_ALLOW_DISABLED_MODE"] = settings.allow_disabled_mode
+            self.waf.state.backend_body_size_bytes = application.config.get('MAX_CONTENT_LENGTH')
         self._adapter = None
         self._adapter_pid = None
         self._loop_thread = None
         self._adapter_lock = threading.Lock()
         self.trust_pythonanywhere_proxy = trust_pythonanywhere_proxy
+        self.trusted_proxy_ips = {str(ipaddress.ip_address(ip)) for ip in settings.trusted_proxy_ips}
 
     @property
     def adapter(self):
@@ -124,6 +129,19 @@ class ProtectedWSGI:
             if scheme not in {"http", "https"}:
                 return Response(status=400)(environ, start_response)
             environ["wsgi.url_scheme"] = scheme
+        elif environ.get('REMOTE_ADDR') in self.trusted_proxy_ips:
+            # Explicit single-hop reverse proxy: it must overwrite these two
+            # headers and preserve Host. Never accept arbitrary forwarded chains.
+            try:
+                client = str(ipaddress.ip_address(environ.get('HTTP_X_FORWARDED_FOR', '')))
+                scheme = environ.get('HTTP_X_FORWARDED_PROTO', '')
+                if scheme not in {'http', 'https'}:
+                    raise ValueError('Invalid proxy scheme')
+            except ValueError:
+                return Response('{"detail":"Trusted client metadata unavailable."}',
+                                status=503, content_type='application/json')(environ, start_response)
+            environ['REMOTE_ADDR'] = client
+            environ['wsgi.url_scheme'] = scheme
         return self.adapter(environ, start_response)
 
     def close(self):

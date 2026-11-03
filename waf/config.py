@@ -33,3 +33,6 @@ class WAFSettings:
     hard_max_request_bytes: int = 4 * 1024 * 1024
     max_header_count: int = 80
     max_header_bytes: int = 16384
+    trusted_proxy_ips: tuple[str, ...] = tuple(
+        part.strip() for part in os.getenv('WAF_TRUSTED_PROXY_IPS', '').split(',') if part.strip()
+    )

@@ -175,75 +175,12 @@ async def test_csrf_and_stale_revision_rejected(control):
 
 
 @pytest.mark.anyio
-async def test_operator_only_demo_uses_separate_persistent_login_policy(control):
-    client, app, settings, captured = control
-    page = await client.get('/settings/demo')
-    assert page.status_code == 200 and 'demo.js' in page.text
-    state = (await client.get('/waf-api/demo')).json()
-    demo_store = app.state.demo_policy_store
-    assert demo_store.path != app.state.policy_store.path
-    assert state['enabled'] is False
-    assert state['demo_account']['username'] == 'demo_waiter'
-    assert (await client.post('/waf-api/demo/login', json={
-        'username': 'demo_waiter', 'password': 'incorrect-synthetic-password',
-    })).status_code == 403
-    headers = {'x-csrf-token': state['csrf_token']}
-    assert (await client.put('/waf-api/demo', json={
-        'revision': state['revision'], 'enabled': True, 'threshold': 3, 'lockout_seconds': 30,
-    }, headers=headers)).status_code == 200
-
-    bad = {'username': 'demo_waiter', 'password': 'incorrect-synthetic-password'}
-    assert [(await client.post('/waf-api/demo/login', json=bad, headers=headers)).status_code
-            for _ in range(2)] == [401, 401]
-    blocked = await client.post('/waf-api/demo/login', json=bad, headers=headers)
-    assert blocked.status_code == 429 and blocked.headers['retry-after'] == '31'
-    active = (await client.get('/waf-api/demo')).json()
-    assert active['enabled'] is True
-    assert active['blocks'][0]['identifier'] == 'd***'
-    assert active['blocks'][0]['attempts'] == 3 and active['blocks'][0]['enforced'] is True
-    assert any(item['action'] == 'security_block' for item in active['block_history'])
-
-    restarted = create_app(settings)
-    persisted = restarted.state.demo_policy_store.read()
-    assert persisted['policy']['mode'] == 'block'
-    assert persisted['policy']['login_max_attempts'] == 3
-    assert persisted['policy']['login_initial_lockout_seconds'] == 30
-
-    unblocked = await client.delete(
-        f"/waf-api/demo/blocks/{active['blocks'][0]['id']}",
-        headers={'x-csrf-token': active['csrf_token']},
-    )
-    assert unblocked.status_code == 200 and not unblocked.json()['blocks']
-    assert (await client.post('/waf-api/demo/login', json=bad, headers={
-        'x-csrf-token': unblocked.json()['csrf_token'],
-    })).status_code == 401
-
-    off = await client.put('/waf-api/demo', json={
-        'revision': unblocked.json()['revision'], 'enabled': False,
-        'threshold': 3, 'lockout_seconds': 30,
-    }, headers={'x-csrf-token': unblocked.json()['csrf_token']})
-    assert off.status_code == 200
-    responses = []
-    for _ in range(20):
-        response = await client.post('/waf-api/demo/login', json=bad,
-                                     headers={'x-csrf-token': off.json()['csrf_token']})
-        responses.append(response.status_code)
-    assert responses == [401] * 20
-    valid = await client.post('/waf-api/demo/login', json={
-        'username': 'demo_waiter', 'password': off.json()['demo_account']['password'],
-    }, headers={'x-csrf-token': off.json()['csrf_token']})
-    assert valid.status_code == 200 and valid.json()['demo'] is True
-    assert app.state.policy_store.read()['policy'] == Policy().model_dump()
-    assert not captured
-
-    anonymous = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url='https://waf.test',
-    )
-    try:
-        assert (await anonymous.get('/waf-api/demo')).status_code == 401
-        assert (await anonymous.get('/settings/demo')).status_code == 303
-    finally:
-        await anonymous.aclose()
+async def test_no_separate_demo_policy_or_endpoints(control):
+    client, app, settings, _ = control
+    assert not hasattr(app.state, 'demo_policy_store')
+    assert not settings.policy_path.with_name('policy-demo.sqlite3').exists()
+    for method in ['GET', 'PUT', 'POST', 'DELETE']:
+        assert (await client.request(method, '/waf-api/demo')).status_code == 404
 
 
 @pytest.mark.anyio
@@ -255,7 +192,7 @@ async def test_monitor_detects_without_blocking(control):
     assert captured
     event = json.loads(settings.log_path.read_text().splitlines()[-1])
     assert set(event['matched_rules']) == {'SQLI-001', 'XSS-001', 'TRAV-001'}
-    assert event['decision'] == 'allowed'
+    assert event['decision'] == 'detected'
 
 
 @pytest.mark.anyio
